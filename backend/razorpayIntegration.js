@@ -225,11 +225,11 @@ async function createRazorpayOrderHandler(req, res) {
 
     const razorpayOrder = await razorpay.orders.create(options);
 
-    // Update order with Razorpay order ID (stored in stripe_session_id to avoid schema change)
+    // Update order with Razorpay order ID
     await supabase
       .from("Orders")
       .update({
-        stripe_session_id: razorpayOrder.id,
+        razorpay_order_id: razorpayOrder.id,
         payment_status: "pending"
       })
       .eq("id", orderId);
@@ -275,7 +275,7 @@ async function verifyPaymentHandler(req, res) {
     const { data: order, error: fetchErr } = await supabase
       .from("Orders")
       .select("*")
-      .eq("stripe_session_id", razorpay_order_id)
+      .eq("razorpay_order_id", razorpay_order_id)
       .single();
 
     if (fetchErr || !order) {
@@ -287,7 +287,7 @@ async function verifyPaymentHandler(req, res) {
       .update({
         payment_status: "paid",
         amount_paid: order.amount_paid,
-        stripe_payment_intent_id: razorpay_payment_id
+        razorpay_payment_id: razorpay_payment_id
       })
       .eq("id", order.id);
 
@@ -314,7 +314,7 @@ async function getPaymentStatusHandler(req, res) {
     const { data: order, error } = await supabase
       .from("Orders")
       .select("*")
-      .eq("stripe_session_id", sessionId)
+      .eq("razorpay_order_id", sessionId)
       .single();
 
     if (error || !order) {
@@ -328,9 +328,9 @@ async function getPaymentStatusHandler(req, res) {
     return res.json({
       orderId: order.id,
       paymentStatus: order.payment_status,
-      stripeSessionId: order.stripe_session_id,
+      razorpayOrderId: order.razorpay_order_id,
       amountPaid: order.amount_paid,
-      stripePaymentIntentId: order.stripe_payment_intent_id
+      razorpayPaymentId: order.razorpay_payment_id
     });
   } catch (error) {
     console.error("Error getting payment status:", error);
@@ -366,9 +366,9 @@ async function handleWebhook(req, res) {
         .from("Orders")
         .update({
           payment_status: "paid",
-          stripe_payment_intent_id: paymentPayload.id
+          razorpay_payment_id: paymentPayload.id
         })
-        .eq("stripe_session_id", orderPayload.id);
+        .eq("razorpay_order_id", orderPayload.id);
     }
 
     return res.json({ received: true });
@@ -404,19 +404,19 @@ async function refundHandler(req, res) {
       return res.status(400).json({ error: "Can only refund paid orders" });
     }
 
-    if (!order.stripe_payment_intent_id) {
+    if (!order.razorpay_payment_id) {
       return res.status(400).json({ error: "No payment ID found for this order" });
     }
 
     // Call Razorpay Refunds API
     const refundOptions = {
-      payment_id: order.stripe_payment_intent_id,
+      payment_id: order.razorpay_payment_id,
     };
     if (amount) {
       refundOptions.amount = Math.round(amount * 100); // in paise
     }
 
-    const refund = await razorpay.payments.refund(order.stripe_payment_intent_id, refundOptions);
+    const refund = await razorpay.payments.refund(order.razorpay_payment_id, refundOptions);
 
     await supabase
       .from("Orders")

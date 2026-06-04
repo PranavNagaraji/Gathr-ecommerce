@@ -41,7 +41,7 @@ export default function PaymentSuccess() {
         setOrderDetails({
           orderId: response.data.orderId,
           amountPaid: response.data.amountPaid,
-          stripeSessionId: response.data.stripeSessionId
+          razorpayOrderId: response.data.razorpayOrderId
         });
       } catch (error) {
         console.error("Error verifying payment:", error);
