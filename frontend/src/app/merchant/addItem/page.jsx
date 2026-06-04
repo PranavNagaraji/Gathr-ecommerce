@@ -781,7 +781,7 @@ export default function addItemPage() {
                                     onChange={(values) => setFormData(prev => ({ ...prev, category: values }))}
                                     options={[...new Set([...categoryOptions, 'Other'])].map(cat => ({ label: cat, value: cat }))}
                                     size="large"
-                                    dropdownStyle={{ background: 'var(--popover)', color: 'var(--popover-foreground)' }}
+                                    styles={{ popup: { root: { background: 'var(--popover)', color: 'var(--popover-foreground)' } } }}
                                 />
                                 {formData.category.includes('Other') && (
                                     <div className="mt-4">

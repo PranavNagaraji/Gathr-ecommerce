@@ -364,7 +364,7 @@ export default function EditItemPage() {
               </div>
               <div>
                 <label className="text-sm font-medium text-[var(--muted-foreground)] mb-2 block">Categories</label>
-                <Select mode="multiple" allowClear style={{ width: '100%' }} placeholder="Select categories" value={formData.category} onChange={handleCategorySelectChange} options={allCategoryOptions} size="large" dropdownStyle={{ background: 'var(--popover)', color: 'var(--popover-foreground)' }} />
+                <Select mode="multiple" allowClear style={{ width: '100%' }} placeholder="Select categories" value={formData.category} onChange={handleCategorySelectChange} options={allCategoryOptions} size="large" styles={{ popup: { root: { background: 'var(--popover)', color: 'var(--popover-foreground)' } } }} />
                 {formData.category.includes('Other') && (
                   <div className="mt-4">
                     <label className="text-sm font-medium text-[var(--muted-foreground)]">New Category Name</label>

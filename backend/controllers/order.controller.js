@@ -239,6 +239,9 @@ export const placeOrder = async (req, res) => {
     return res.status(400).json({ message: 'Missing coordinates to compute delivery distance' });
   }
   const distanceKm = getDistanceKm(Number(shopLat), Number(shopLong), Number(destLat), Number(destLong));
+  if (distanceKm > 18.0) {
+    return res.status(400).json({ message: `Delivery address is too far (${distanceKm.toFixed(1)} km) from the shop. Maximum delivery distance is 18 km. Please choose a nearby address.` });
+  }
   const GST_RATE = parseFloat(process.env.GST_RATE || '0.18');
   const DELIVERY_BASE_KM = parseFloat(process.env.DELIVERY_BASE_KM || '2');
   const DELIVERY_BASE_FEE = parseFloat(process.env.DELIVERY_BASE_FEE || '30');
@@ -266,6 +269,13 @@ export const placeOrder = async (req, res) => {
   }
 
   console.log("Order created:", orderData);
+
+  // Associate active cart items with this order
+  await supabase
+    .from("Cart_items")
+    .update({ order_id: orderData[0].id })
+    .eq("cart_id", cart_id)
+    .is("order_id", null);
   const { data: cartItemsUpdate, error: cartItemsError } = await supabase
     .from("Cart_items")
     .select("quantity, item_id")

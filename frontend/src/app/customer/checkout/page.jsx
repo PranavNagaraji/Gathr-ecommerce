@@ -29,6 +29,7 @@ const Checkout = () => {
   const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
   const [checkOutDetails , setCheckOutDetails] = useState({});
   const [priceBreakdown, setPriceBreakdown] = useState(null);
+  const [shopDetails, setShopDetails] = useState(null);
 
   const [addressToggle, setAddressToggle] = useState(false);
   const [addresses, setAddresses] = useState([]);
@@ -134,6 +135,20 @@ const Checkout = () => {
     };
     fetchBreakdown();
   }, [selectedAddressId, isLoaded, isSignedIn, user]);
+
+  useEffect(() => {
+    const shopId = checkOutDetails?.shop_id || checkOutDetails?.shopId;
+    if (!shopId) return;
+    const fetchShop = async () => {
+      try {
+        const res = await axios.get(`${API_URL}/api/customer/getShop/${shopId}`);
+        setShopDetails(res.data.shop);
+      } catch (e) {
+        console.error("Error fetching shop details:", e);
+      }
+    };
+    fetchShop();
+  }, [checkOutDetails, API_URL]);
 
   const handleSelect = (id) => {
     setSelectedAddressId(id);
@@ -288,6 +303,11 @@ const Checkout = () => {
   const handleCheckOut = async () =>{
     if (!selectedAddressId) {
       showToast.error("Please select a delivery address");
+      return;
+    }
+    
+    if (priceBreakdown && priceBreakdown.distanceKm > 18.0) {
+      showToast.error("Delivery address is outside the allocated delivery range of 18 km.");
       return;
     }
     
@@ -458,62 +478,83 @@ const Checkout = () => {
             <h2 className="text-xl font-semibold mb-4">Select a Shipping Address</h2>
 
             <div className="grid md:grid-cols-2 gap-4" role="list" aria-label="Saved addresses">
-          {addresses.map((address,idx) => (
-            <label
-              key={idx}
-              role="listitem"
-              className={`border rounded-xl p-4 cursor-pointer transition-all ${
-                selectedAddressId === address.id
-                  ? "border-[var(--primary)] bg-[color-mix(in_oklab,var(--primary),white_88%)] text-[var(--foreground)] shadow-sm dark:bg-[color-mix(in_oklab,var(--primary),black_75%)] dark:text-white"
-                  : "border-[var(--border)] hover:border-[var(--ring)]/60 bg-[var(--card)]"
-              }`}
-            >
-              <div className="flex items-start gap-3 mb-3">
-                <input
-                  type="radio"
-                  name="address"
-                  value={address.id}
-                  checked={selectedAddressId === address.id}
-                  onChange={() => handleSelect(address.id)}
-                  className="mt-1 accent-[var(--primary)]"
-                />
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-start justify-between gap-2 mb-1">
-                    <p className="font-semibold text-base">{address.title}</p>
-                    <button
-                      onClick={(e) => {
-                        e.preventDefault();
-                        handleDeleteAddress(address.id);
-                      }}
-                      className="text-[var(--destructive)] hover:opacity-70 transition"
-                      aria-label="Delete address"
-                    >
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                  <p className="text-sm text-[var(--muted-foreground)] mb-1">{address.address}</p>
-                  {address.description && (
-                    <p className="text-xs text-[var(--muted-foreground)] mb-1">{address.description}</p>
-                  )}
-                  {address.mobile_no && (
-                    <p className="text-sm flex items-center gap-1">📞 {address.mobile_no}</p>
-                  )}
-                </div>
-              </div>
-
-              {/* Map */}
-              {address.location?.lat && address.location?.long && (
-                <div className="rounded-lg overflow-hidden border border-[var(--border)] mt-3 relative z-0">
-                  <MiniLeafletMap
-                    style={containerStyle}
-                    center={[address.location.lat, address.location.long]}
-                    zoom={15}
-                    marker={{ position: [address.location.lat, address.location.long], draggable: false }}
+          {addresses.map((address,idx) => {
+            const isSelected = selectedAddressId === address.id;
+            const isTooFar = isSelected && priceBreakdown && priceBreakdown.distanceKm > 18.0;
+            return (
+              <label
+                key={idx}
+                role="listitem"
+                style={
+                  isSelected
+                    ? {
+                        backgroundColor: isTooFar
+                          ? "color-mix(in oklab, var(--destructive), var(--background) 70%)"
+                          : "color-mix(in oklab, var(--primary), var(--background) 70%)",
+                        borderColor: isTooFar ? "var(--destructive)" : "var(--primary)"
+                      }
+                    : {}
+                }
+                className={`border rounded-xl p-4 cursor-pointer transition-all ${
+                  isSelected
+                    ? "text-[var(--foreground)] shadow-md font-medium"
+                    : "border-[var(--border)] hover:border-[var(--ring)]/60 bg-[var(--card)] text-[var(--muted-foreground)]"
+                }`}
+              >
+                <div className="flex items-start gap-3 mb-3">
+                  <input
+                    type="radio"
+                    name="address"
+                    value={address.id}
+                    checked={isSelected}
+                    onChange={() => handleSelect(address.id)}
+                    className="mt-1 accent-[var(--primary)]"
                   />
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <div>
+                        <p className="font-semibold text-base">{address.title}</p>
+                        {isTooFar && (
+                          <span className="text-xs text-red-600 dark:text-red-200 font-semibold block mt-0.5 animate-pulse">
+                            ⚠️ Outside Delivery Range ({priceBreakdown.distanceKm.toFixed(1)} km)
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={(e) => {
+                          e.preventDefault();
+                          handleDeleteAddress(address.id);
+                        }}
+                        className="text-[var(--destructive)] hover:opacity-70 transition"
+                        aria-label="Delete address"
+                      >
+                        <Trash2 size={18} />
+                      </button>
+                    </div>
+                    <p className={`text-sm mb-1 ${isSelected ? "text-[var(--foreground)]/85" : "text-[var(--muted-foreground)]"}`}>{address.address}</p>
+                    {address.description && (
+                      <p className={`text-xs mb-1 ${isSelected ? "text-[var(--foreground)]/75" : "text-[var(--muted-foreground)]"}`}>{address.description}</p>
+                    )}
+                    {address.mobile_no && (
+                      <p className="text-sm flex items-center gap-1 mt-1.5">📞 {address.mobile_no}</p>
+                    )}
+                  </div>
                 </div>
-              )}
-            </label>
-          ))}
+
+                {/* Map */}
+                {address.location?.lat && address.location?.long && (
+                  <div className="rounded-lg overflow-hidden border border-[var(--border)] mt-3 relative z-0">
+                    <MiniLeafletMap
+                      style={containerStyle}
+                      center={[address.location.lat, address.location.long]}
+                      zoom={15}
+                      marker={{ position: [address.location.lat, address.location.long], draggable: false }}
+                    />
+                  </div>
+                )}
+              </label>
+            );
+          })}
           <button
             onClick={()=>setAddressToggle(!addressToggle)}
             className="min-h-[200px] border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center hover:bg-[var(--muted)]/40 hover:border-[var(--primary)]/50 transition-all group"
@@ -660,9 +701,34 @@ const Checkout = () => {
               <span>Total</span>
               <span>₹{(priceBreakdown?.total ?? checkOutDetails?.totalPrice ?? 0).toFixed(2)}</span>
             </div>
+            {priceBreakdown && priceBreakdown.distanceKm > 18.0 && (
+              <div className="mt-4 p-4 border border-red-500/30 bg-red-500/10 dark:bg-red-950/20 text-red-600 dark:text-red-400 rounded-xl text-sm space-y-2">
+                <div className="font-semibold flex items-center gap-1.5 text-red-700 dark:text-red-300">
+                  ⚠️ Undeliverable Distance
+                </div>
+                <p className="leading-relaxed text-xs">
+                  The selected delivery address is <strong>{priceBreakdown.distanceKm.toFixed(1)} km</strong> away. This is outside Gathr's maximum delivery range of <strong>18 km</strong> for this shop.
+                </p>
+                {shopDetails && (
+                  <p className="text-xs border-t border-red-500/20 pt-2 mt-2 text-red-600/90 dark:text-red-400/90">
+                    <strong>Shop Address:</strong> {shopDetails.address}
+                  </p>
+                )}
+                <p className="text-xs font-semibold text-red-700 dark:text-red-300 mt-2">
+                  Please select or add a closer delivery address.
+                </p>
+              </div>
+            )}
             <div className="mt-4">
-            <AnimatedButton onClick={handleCheckOut} className="" size="lg" rounded="lg" variant="primary" >
-              Checkout
+            <AnimatedButton
+              onClick={handleCheckOut}
+              className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
+              size="lg"
+              rounded="lg"
+              variant={priceBreakdown && priceBreakdown.distanceKm > 18.0 ? "muted" : "primary"}
+              disabled={!!(priceBreakdown && priceBreakdown.distanceKm > 18.0)}
+            >
+              {priceBreakdown && priceBreakdown.distanceKm > 18.0 ? "Undeliverable" : "Checkout"}
             </AnimatedButton>
             </div>
           </div>

@@ -146,6 +146,9 @@ async function createOrderFromCartHandler(req, res) {
       return res.status(400).json({ error: "Missing coordinates for delivery computation" });
     }
     const distanceKm = getDistanceKm(Number(shopLat), Number(shopLong), Number(destLat), Number(destLong));
+    if (distanceKm > 18.0) {
+      return res.status(400).json({ error: `Delivery address is too far (${distanceKm.toFixed(1)} km) from the shop. Maximum delivery distance is 18 km. Please choose a nearby address.` });
+    }
 
     const GST_RATE = parseFloat(process.env.GST_RATE || '0.18');
     const DELIVERY_BASE_KM = parseFloat(process.env.DELIVERY_BASE_KM || '2');

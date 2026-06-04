@@ -565,8 +565,34 @@ export const addRating = async (req, res) => {
 };
 
 const createCart = async (userId) => {
-  const { data: cart, error: cartError } = await supabase.from("Cart").insert({ user_id: userId, status: "active" }).select("*").single();
-  if (cartError) return { message: "Cart not found", error: cartError.message };
+  // Check if a cart already exists for this user (any status)
+  const { data: existingCart, error: findError } = await supabase
+    .from("Cart")
+    .select("*")
+    .eq("user_id", userId)
+    .maybeSingle();
+
+  if (existingCart) {
+    // If it exists, update status to "active" and return it
+    const { data: updatedCart, error: updateError } = await supabase
+      .from("Cart")
+      .update({ status: "active" })
+      .eq("id", existingCart.id)
+      .select("*")
+      .single();
+    
+    if (updateError) return { message: "Failed to reactivate cart", error: updateError.message };
+    return updatedCart;
+  }
+
+  // If no cart exists at all, insert a new active cart
+  const { data: cart, error: cartError } = await supabase
+    .from("Cart")
+    .insert({ user_id: userId, status: "active" })
+    .select("*")
+    .single();
+  
+  if (cartError) return { message: "Cart creation failed", error: cartError.message };
   return cart;
 }
 
@@ -603,7 +629,7 @@ export const getCurrentCart = async (req, res) => {
       currentCart = await createCart(userId);
       if (!currentCart || currentCart.error || !currentCart.id) {
         return res.status(500).json({
-          message: "Failed to create cart",
+          message: "Failed to create/reactivate cart",
           error: currentCart?.error || "Unknown error"
         });
       }
@@ -625,7 +651,8 @@ export const getCurrentCart = async (req, res) => {
     const { data: cartItems, error: cartItemsError } = await supabase
       .from("Cart_items")
       .select("*, Items(*)")
-      .eq("cart_id", currentCart.id);
+      .eq("cart_id", currentCart.id)
+      .is("order_id", null);
 
     if (cartItemsError)
       return res
@@ -714,7 +741,8 @@ export const addToCart = async (req, res) => {
     .eq("user_id", user.id)
     .eq("item_id", itemId)
     .eq("cart_id", cartId)
-    .single();
+    .is("order_id", null)
+    .maybeSingle();
 
   let cartItem;
 
@@ -797,7 +825,8 @@ export const deleteFromCart = async (req, res) => {
     .select("*")
     .eq("cart_id", cartId)
     .eq("item_id", itemId)
-    .single();
+    .is("order_id", null)
+    .maybeSingle();
 
   if (!existingItem) return res.status(404).json({ message: "Item not found in cart" });
   if (quantity > existingItem.quantity)

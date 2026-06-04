@@ -383,7 +383,7 @@ export default function createShop() {
                   placeholder="Select categories"
                   maxTagCount="responsive"
                   size="large"
-                  dropdownStyle={{ background: 'var(--popover)', color: 'var(--popover-foreground)' }}
+                  styles={{ popup: { root: { background: 'var(--popover)', color: 'var(--popover-foreground)' } } }}
                   options={[...new Set([...categoriesOptions, 'Other'])].map((v) => ({ value: v, label: v }))}
                 />
                 {formData.category?.includes('Other') && (
