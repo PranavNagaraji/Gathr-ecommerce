@@ -10,7 +10,7 @@ import ChatbotWidget from "../../../../components/ChatbotWidget.jsx";
 import { Heart, Plus, Minus } from "lucide-react";
 import { toast } from "react-hot-toast";
 
-export default function ShopItems() {
+function ShopItemsContent() {
   const { user } = useUser();
   const { isLoaded, isSignedIn, getToken } = useAuth();
  
@@ -869,4 +869,21 @@ export default function ShopItems() {
       <ChatbotWidget items={items} shopId={shop_id} />
     </div>
   );
+}
+export default function ShopItems() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-[var(--border)] border-t-[var(--primary)] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return <ShopItemsContent />;
 }

@@ -459,7 +459,8 @@ export default function Navbar() {
                         onClick={async (e) => {
                           e.preventDefault();
                           try { setIsProfileOpen(false); } catch {}
-                          await signOut({ redirectUrl: '/' });
+                          await signOut();
+                          window.location.href = "/";
                         }}
                       >
                         {t("nav.signOut")}
@@ -579,7 +580,8 @@ export default function Navbar() {
                       onClick={async (e) => {
                         e.preventDefault();
                         try { setMenuOpen(false); } catch {}
-                        await signOut({ redirectUrl: '/' });
+                        await signOut();
+                        window.location.href = "/";
                       }}
                     >
                       {t("nav.signOut")}

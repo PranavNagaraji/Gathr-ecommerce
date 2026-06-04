@@ -3,9 +3,11 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import { Heart } from "lucide-react";
+import { toast } from "react-hot-toast";
 
 export default function CustomerDashboard() {
   const { user } = useUser();
@@ -31,6 +33,8 @@ export default function CustomerDashboard() {
 
   const [cartCount, setCartCount] = useState(0);
   const [wishlistCount, setWishlistCount] = useState(0);
+  const [wishlistIds, setWishlistIds] = useState(new Set());
+  const [isWlLoading, setIsWlLoading] = useState(false);
 
   const handleGeolocation = () => {
     if (typeof window !== "undefined" && "geolocation" in navigator) {
@@ -201,6 +205,73 @@ export default function CustomerDashboard() {
     return () => { ignore = true; };
   }, [isLoaded, isSignedIn, user, getToken, API_URL]);
 
+  const fetchWishlist = useCallback(async () => {
+    if (!isSignedIn || !user?.id) return;
+    setIsWlLoading(true);
+    try {
+      const token = await getToken();
+      const res = await axios.post(
+        `${API_URL}/api/customer/wishlist/list`,
+        { clerkId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const ids = new Set((res?.data?.items || []).map((it) => it.id));
+      setWishlistIds(ids);
+    } catch (_) {
+      setWishlistIds(new Set());
+    } finally {
+      setIsWlLoading(false);
+    }
+  }, [isSignedIn, user?.id, getToken, API_URL]);
+
+  useEffect(() => {
+    fetchWishlist();
+  }, [fetchWishlist]);
+
+  useEffect(() => {
+    const handler = () => {
+      fetchWishlist();
+    };
+    window.addEventListener('wishlist:changed', handler);
+    return () => window.removeEventListener('wishlist:changed', handler);
+  }, [fetchWishlist]);
+
+  const toggleWishlist = async (itemId) => {
+    if (!user?.id) return;
+    const inWl = wishlistIds.has(itemId);
+    try {
+      const token = await getToken();
+      if (inWl) {
+        await axios.post(
+          `${API_URL}/api/customer/wishlist/remove`,
+          { clerkId: user.id, itemId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const next = new Set(wishlistIds);
+        next.delete(itemId);
+        setWishlistIds(next);
+        setWishlistCount(prev => Math.max(0, prev - 1));
+        window.dispatchEvent(new CustomEvent('wishlist:changed', { detail: { delta: -1 } }));
+        toast.success("Removed from wishlist");
+      } else {
+        await axios.post(
+          `${API_URL}/api/customer/wishlist/add`,
+          { clerkId: user.id, itemId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const next = new Set(wishlistIds);
+        next.add(itemId);
+        setWishlistIds(next);
+        setWishlistCount(prev => prev + 1);
+        window.dispatchEvent(new CustomEvent('wishlist:changed', { detail: { delta: 1 } }));
+        toast.success("Added to wishlist");
+      }
+    } catch (err) {
+      console.error('Wishlist toggle failed', err);
+      toast.error('Failed to update wishlist');
+    }
+  };
+
   const name = useMemo(() => user?.firstName || user?.fullName || user?.username || "There", [user]);
 
   const gridVariants = { hidden: {}, show: { transition: { staggerChildren: 0.06 } } };
@@ -320,7 +391,6 @@ export default function CustomerDashboard() {
                 onClick={() => setShowLocationPrompt(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-1 bg-[var(--muted)]/50 hover:bg-[var(--muted)] text-xs font-semibold border border-[var(--border)] rounded-full transition mt-2 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
               >
-                <span>📍</span>
                 <span>{locationLabel}</span>
                 <span className="text-[var(--muted-foreground)] ml-0.5 font-normal">(Change)</span>
               </button>
@@ -386,8 +456,16 @@ export default function CustomerDashboard() {
                 {items.slice(0, 8).map((it) => (
                   <Link key={it.id} href={`/customer/getShops/${it.shop_id}/item/${it.id}`} className="min-w-[70%] sm:min-w-[260px] snap-start">
                     <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
-                      <div className="aspect-[4/3] bg-[var(--muted)]">
+                      <div className="aspect-[4/3] bg-[var(--muted)] relative">
                         <img src={it.images?.[0]?.url || "/placeholder.png"} alt={it.name} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(it.id); }}
+                          className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80 z-10"
+                          aria-pressed={wishlistIds.has(it.id)}
+                        >
+                          <Heart className={wishlistIds.has(it.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(it.id) ? "currentColor" : "none"} size={16} />
+                        </button>
                       </div>
                       <div className="p-4">
                         <h3 className="font-bold text-lg mt-1 truncate">{it.name}</h3>
@@ -403,8 +481,16 @@ export default function CustomerDashboard() {
                 {items.slice(0, 8).map((it) => (
                   <motion.div key={it.id} variants={cardVariants} whileHover="hover" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden">
                     <Link href={`/customer/getShops/${it.shop_id}/item/${it.id}`} className="block">
-                      <div className="aspect-[4/3] bg-[var(--muted)]">
+                      <div className="aspect-[4/3] bg-[var(--muted)] relative">
                         <img src={it.images?.[0]?.url || "/placeholder.png"} alt={it.name} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(it.id); }}
+                          className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80 z-10"
+                          aria-pressed={wishlistIds.has(it.id)}
+                        >
+                          <Heart className={wishlistIds.has(it.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(it.id) ? "currentColor" : "none"} size={16} />
+                        </button>
                       </div>
                       <div className="p-4">
                         <h3 className="font-bold text-lg mt-1 truncate">{it.name}</h3>
@@ -498,8 +584,16 @@ export default function CustomerDashboard() {
                 {recs.slice(0, 8).map((it) => (
                   <Link key={it.id} href={`/customer/getShops/${it.shop_id}/item/${it.id}`} className="min-w-[70%] sm:min-w-[260px] snap-start">
                     <div className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden transition-transform duration-200 hover:-translate-y-1 hover:shadow-lg">
-                      <div className="aspect-[4/3] bg-[var(--muted)]">
+                      <div className="aspect-[4/3] bg-[var(--muted)] relative">
                         <img src={it.images?.[0]?.url || "/placeholder.png"} alt={it.name} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(it.id); }}
+                          className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80 z-10"
+                          aria-pressed={wishlistIds.has(it.id)}
+                        >
+                          <Heart className={wishlistIds.has(it.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(it.id) ? "currentColor" : "none"} size={16} />
+                        </button>
                       </div>
                       <div className="p-4">
                         <div className="mt-1 flex flex-wrap gap-2 min-h-[28px]">
@@ -522,8 +616,16 @@ export default function CustomerDashboard() {
                 {recs.slice(0, 8).map((it) => (
                   <motion.div key={it.id} variants={cardVariants} whileHover="hover" className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden hover:shadow-lg">
                     <Link href={`/customer/getShops/${it.shop_id}/item/${it.id}`} className="block">
-                      <div className="aspect-[4/3] bg-[var(--muted)]">
+                      <div className="aspect-[4/3] bg-[var(--muted)] relative">
                         <img src={it.images?.[0]?.url || "/placeholder.png"} alt={it.name} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(it.id); }}
+                          className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80 z-10"
+                          aria-pressed={wishlistIds.has(it.id)}
+                        >
+                          <Heart className={wishlistIds.has(it.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(it.id) ? "currentColor" : "none"} size={16} />
+                        </button>
                       </div>
                       <div className="p-4">
                         <div className="mt-1 flex flex-wrap gap-2 min-h-[28px]">

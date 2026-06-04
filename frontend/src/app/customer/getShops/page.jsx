@@ -1,12 +1,14 @@
 "use client";
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { Heart } from "lucide-react";
+import { toast } from "react-hot-toast";
 
-export default function CustomerDashboard() {
+function CustomerDashboardContent() {
   const { user } = useUser();
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const [isMounted, setIsMounted] = useState(false);
@@ -27,6 +29,8 @@ export default function CustomerDashboard() {
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
   const [catOpen, setCatOpen] = useState(false);
   const [shopsLoading, setShopsLoading] = useState(false);
+  const [wishlistIds, setWishlistIds] = useState(new Set());
+  const [isWlLoading, setIsWlLoading] = useState(false);
 
   // Global item search states
   const [itemQuery, setItemQuery] = useState("");
@@ -96,6 +100,71 @@ export default function CustomerDashboard() {
       })();
     }
   }, [user]);
+
+  const fetchWishlist = useCallback(async () => {
+    if (!isSignedIn || !user?.id) return;
+    setIsWlLoading(true);
+    try {
+      const token = await getToken();
+      const res = await axios.post(
+        `${API_URL}/api/customer/wishlist/list`,
+        { clerkId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      const ids = new Set((res?.data?.items || []).map((it) => it.id));
+      setWishlistIds(ids);
+    } catch (_) {
+      setWishlistIds(new Set());
+    } finally {
+      setIsWlLoading(false);
+    }
+  }, [isSignedIn, user?.id, getToken, API_URL]);
+
+  useEffect(() => {
+    fetchWishlist();
+  }, [fetchWishlist]);
+
+  useEffect(() => {
+    const handler = () => {
+      fetchWishlist();
+    };
+    window.addEventListener('wishlist:changed', handler);
+    return () => window.removeEventListener('wishlist:changed', handler);
+  }, [fetchWishlist]);
+
+  const toggleWishlist = async (itemId) => {
+    if (!user?.id) return;
+    const inWl = wishlistIds.has(itemId);
+    try {
+      const token = await getToken();
+      if (inWl) {
+        await axios.post(
+          `${API_URL}/api/customer/wishlist/remove`,
+          { clerkId: user.id, itemId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const next = new Set(wishlistIds);
+        next.delete(itemId);
+        setWishlistIds(next);
+        window.dispatchEvent(new CustomEvent('wishlist:changed', { detail: { delta: -1 } }));
+        toast.success("Removed from wishlist");
+      } else {
+        await axios.post(
+          `${API_URL}/api/customer/wishlist/add`,
+          { clerkId: user.id, itemId },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        const next = new Set(wishlistIds);
+        next.add(itemId);
+        setWishlistIds(next);
+        window.dispatchEvent(new CustomEvent('wishlist:changed', { detail: { delta: 1 } }));
+        toast.success("Added to wishlist");
+      }
+    } catch (err) {
+      console.error('Wishlist toggle failed', err);
+      toast.error('Failed to update wishlist');
+    }
+  };
 
   const locationLabel = useMemo(() => {
     if (!location) return "";
@@ -721,8 +790,16 @@ export default function CustomerDashboard() {
               {itemResults.map((it) => (
                 <motion.div key={it.id} variants={cardVariants} className="bg-[var(--card)] border border-[var(--border)] rounded-2xl overflow-hidden">
                   <Link href={`/customer/getShops/${it.shop_id}/item/${it.id}`} className="block">
-                    <div className="aspect-[4/3] bg-[var(--muted)]">
+                    <div className="aspect-[4/3] bg-[var(--muted)] relative">
                       <img src={it.images?.[0]?.url || "/placeholder.png"} alt={it.name} className="w-full h-full object-cover" />
+                      <button
+                        type="button"
+                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(it.id); }}
+                        className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80 z-10"
+                        aria-pressed={wishlistIds.has(it.id)}
+                      >
+                        <Heart className={wishlistIds.has(it.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(it.id) ? "currentColor" : "none"} size={16} />
+                      </button>
                     </div>
                     <div className="p-4">
                       <div className="mt-1 flex flex-wrap gap-2 min-h-[28px]">
@@ -953,4 +1030,21 @@ export default function CustomerDashboard() {
     )}
   </>
   );
+}
+export default function CustomerDashboard() {
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+        <div className="w-12 h-12 border-4 border-[var(--border)] border-t-[var(--primary)] rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  return <CustomerDashboardContent />;
 }
