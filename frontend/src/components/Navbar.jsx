@@ -1,0 +1,605 @@
+'use client';
+import { useUser, useAuth, useClerk } from "@clerk/nextjs";
+import React, { useState, useRef, useEffect } from "react";
+import { Menu, X } from "lucide-react";
+import { Heart } from "lucide-react";
+import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
+import { motion, useScroll, useSpring, AnimatePresence } from "framer-motion";
+import { Home, ShoppingCart, } from "lucide-react";
+import ThemeToggle from "@/components/theme/ThemeToggle";
+import axios from "axios";
+import { useTranslation } from "react-i18next";
+import "@/lib/i18n";
+
+const MotionLink = motion(Link);
+
+// --- Link configurations for different user roles ---
+const merchantLinks = [
+  { name: "Dashboard", href: "/merchant/dashboard" },
+  { name: "Inventory", href: "/merchant/inventory" },
+  { name: "New Orders", href: "/merchant/orders" },
+  { name: "All Orders", href: "/merchant/allOrders" }
+];
+
+const customerLinks = [
+  { name: "Home", href: "/customer/dashboard" },
+  { name: "Shops", href: "/customer/getShops" },
+  { name: "Cart", href: "/customer/cart" },
+  { name: "Orders", href: "/customer/orders" },
+  { name: "Contact", href: "/about" },
+];
+
+const carrierLinks = [
+  { name: "Dashboard", href: "/carrier/dashboard" },
+  { name: "Assigned Deliveries", href: "/carrier/assignedDeliveries" },
+  { name: "Delivery History", href: "/carrier/deliveryHistory" },
+  { name: "Update Profile", href: "/carrier/updateProfile" },
+];
+
+const adminLinks = [
+  { name: "Admin Dashboard", href: "/admin" },
+  { name: "Complaints", href: "/admin/complaints" },
+  { name: "Send Mail", href: "/admin/mail" },
+];
+
+const links = [
+  { name: "Home", href: "/" },
+  { name: "Shops", href: "/customer/getShops" },
+  { name: "contact", href: "/customer/orders" },
+];
+
+function LanguageSwitcher({ currentLanguage, onChange, t }) {
+  const languages = [
+    { code: "en", labelKey: "nav.languageShortEn" },
+    { code: "te", labelKey: "nav.languageShortTe" },
+    { code: "ta", labelKey: "nav.languageShortTa" },
+    { code: "hi", labelKey: "nav.languageShortHi" },
+  ];
+
+  return (
+    <div className="flex items-center gap-1 border border-[var(--border)] rounded-full px-2 py-1 text-[0.7rem] uppercase">
+      {languages.map((lang) => (
+        <button
+          key={lang.code}
+          type="button"
+          suppressHydrationWarning={true}
+          onClick={() => onChange(lang.code)}
+          className={`px-1.5 py-0.5 rounded-full transition-colors ${
+            currentLanguage === lang.code
+              ? "bg-[var(--primary)] text-[var(--primary-foreground)]"
+              : "text-[var(--muted-foreground)] hover:bg-[var(--muted)]"
+          }`}
+          aria-label={`${t("nav.language")}: ${lang.code.toUpperCase()}`}
+        >
+          {t(lang.labelKey)}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+export default function Navbar() {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isProfileOpen, setIsProfileOpen] = useState(false);
+  const [cartItemCount, setCartItemCount] = useState(0);
+  const [wishlistCount, setWishlistCount] = useState(0);
+  const [pendingOrdersCount, setPendingOrdersCount] = useState(0);
+  // mounted = true only after client-side hydration; prevents SSR/client mismatch
+  const [mounted, setMounted] = useState(false);
+  const menuRef = useRef(null);
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const { scrollYProgress } = useScroll();
+  const scaleX = useSpring(scrollYProgress, {
+    stiffness: 120,
+    damping: 30,
+    restDelta: 0.001,
+  });
+
+  const { isLoaded, isSignedIn, user } = useUser();
+  const { signOut } = useClerk();
+  
+  const { getToken } = useAuth();
+  const profileImage = user?.imageUrl;
+  const role = user?.publicMetadata?.role;
+  const [isAdmin, setIsAdmin] = useState(false);
+
+  const { t, i18n } = useTranslation("common");
+  const currentLanguage = (i18n.language || "en").split("-")[0];
+
+  const handleLanguageChange = (lang) => {
+    if (!lang || i18n.language === lang) return;
+    i18n.changeLanguage(lang);
+    try {
+      if (typeof window !== "undefined") {
+        localStorage.setItem("language", lang);
+      }
+    } catch {}
+  };
+
+  const getNavLabel = (name) => {
+    switch (name) {
+      case "Home":
+        return t("nav.home");
+      case "Shops":
+        return t("nav.shops");
+      case "Cart":
+        return t("nav.cart");
+      case "Orders":
+        return t("nav.orders");
+      case "Contact":
+      case "contact":
+        return t("nav.contact");
+      case "Dashboard":
+        return t("nav.dashboard");
+      case "Inventory":
+        return t("nav.inventory");
+      case "New Orders":
+        return t("nav.newOrders");
+      case "All Orders":
+        return t("nav.allOrders");
+      case "Assigned Deliveries":
+        return t("nav.assignedDeliveries");
+      case "Delivery History":
+        return t("nav.deliveryHistory");
+      case "Update Profile":
+        return t("nav.updateProfile");
+      case "Admin Dashboard":
+        return t("nav.adminDashboard");
+      case "Complaints":
+        return t("nav.complaints");
+      case "Send Mail":
+        return t("nav.sendMail");
+      default:
+        return name;
+    }
+  };
+
+  const profileHref =
+    role === "merchant" ? "/merchant/profile" :
+    role === "carrier" ? "/carrier/profile" :
+    role === "customer" ? "/customer/profile" : "/profile";
+
+  // While not yet mounted on client, return guest links to match SSR output exactly
+  // (prevents React hydration mismatch). Once mounted + Clerk resolves, use role links.
+  const navLinks = !mounted || !isLoaded
+    ? links
+    : isAdmin
+      ? adminLinks
+      : role === "merchant"
+        ? merchantLinks
+        : role === "carrier"
+          ? carrierLinks
+          : role === "customer"
+            ? customerLinks
+            : links;
+
+  // True when auth state is unresolved on the client — links are hidden via opacity
+  const authLoading = mounted && !isLoaded;
+
+  // Mark as mounted after first client render (eliminates SSR/hydration mismatch)
+  useEffect(() => { setMounted(true); }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setIsProfileOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Detect admin session from localStorage and keep in sync across tabs
+  useEffect(() => {
+    const readAdmin = () => {
+      try {
+        const v = typeof window !== 'undefined' ? localStorage.getItem('adminAuthed') : null;
+        setIsAdmin(v === 'true');
+      } catch { setIsAdmin(false); }
+    };
+    readAdmin();
+    const onStorage = (e) => { if (e.key === 'adminAuthed') readAdmin(); };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
+  const handleAdminLogout = () => {
+    try { localStorage.removeItem('adminAuthed'); } catch {}
+    setIsAdmin(false);
+    router.push('/admin/login');
+  };
+
+  // Fetch cart item count (reusable)
+  const fetchCartCount = React.useCallback(async () => {
+    if (!isSignedIn || !user || role !== "customer") {
+      setCartItemCount(0);
+      return;
+    }
+
+    try {
+      const token = await getToken();
+      const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+      const res = await axios.post(
+        `${API_URL}/api/customer/getCart`,
+        { clerkId: user.id },
+        { headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` } }
+      );
+      const itemCount = res.data.cartItems?.length || 0;
+      setCartItemCount(itemCount);
+    } catch (err) {
+      console.error("Error fetching cart count:", err);
+      setCartItemCount(0);
+    }
+  }, [getToken, isSignedIn, role, user]);
+
+  // Initial/follow-up fetch on nav changes
+  useEffect(() => {
+    fetchCartCount();
+  }, [fetchCartCount, pathname]);
+
+  // Fetch wishlist count (backend)
+  useEffect(() => {
+    const fetchWishlistCount = async () => {
+      if (!isSignedIn || !user || role !== "customer") {
+        setWishlistCount(0);
+        return;
+      }
+      try {
+        const token = await getToken();
+        const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+        const res = await axios.post(
+          `${API_URL}/api/customer/wishlist/count`,
+          { clerkId: user.id },
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setWishlistCount(res?.data?.count || 0);
+      } catch (e) {
+        console.error("Error fetching wishlist count:", e);
+        setWishlistCount(0);
+      }
+    };
+    fetchWishlistCount();
+  }, [isSignedIn, user, role, pathname]);
+
+  // Fetch pending orders count for merchants (for navbar badge)
+  useEffect(() => {
+    const fetchPendingOrders = async () => {
+      if (!isSignedIn || !user || role !== "merchant") {
+        setPendingOrdersCount(0);
+        return;
+      }
+      try {
+        const token = await getToken();
+        const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+        const res = await axios.get(
+          `${API_URL}/api/merchant/get_pending_carts/${user.id}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+        setPendingOrdersCount(Array.isArray(res?.data?.carts) ? res.data.carts.length : 0);
+      } catch (e) {
+        setPendingOrdersCount(0);
+      }
+    };
+    fetchPendingOrders();
+  }, [isSignedIn, user, role, pathname, getToken]);
+
+  // Listen for wishlist changes to update badge instantly
+  useEffect(() => {
+    const handler = (e) => {
+      const delta = e?.detail?.delta ?? 0;
+      setWishlistCount((prev) => Math.max(0, (prev || 0) + delta));
+    };
+    window.addEventListener('wishlist:changed', handler);
+    return () => window.removeEventListener('wishlist:changed', handler);
+  }, []);
+
+  // Listen for cart changes to update badge instantly (re-fetch to stay accurate)
+  useEffect(() => {
+    const handler = () => {
+      fetchCartCount();
+    };
+    window.addEventListener('cart:changed', handler);
+    return () => window.removeEventListener('cart:changed', handler);
+  }, [fetchCartCount]);
+
+  return (
+    <>
+      {/* Scroll Progress Bar */}
+      {/* <motion.div
+        className="fixed top-0 left-0 right-0 h-[1px] bg-[#F15B3B] origin-left z-[60]"
+        style={{ scaleX }}
+      /> */}
+
+      <motion.nav
+        initial={{ y: -80, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ duration: 1, ease: "easeOut" }}
+        className="sticky top-0 z-[1000] w-full bg-card text-[var(--foreground)] shadow-[0_6px_20px_rgba(0,0,0,0.1)] backdrop-blur supports-[backdrop-filter]:bg-card/85"
+        style={{ fontFamily: "'Inter', sans-serif" }}
+      >
+        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3 relative">
+
+          {/* LOGO */}
+          <MotionLink
+            href="/"
+            aria-label={t("aria.gathrHome")}
+            whileHover={{
+              rotate: [-3, 3, -2, 2, 0],
+              transition: { duration: 0.6 },
+            }}
+            className="text-[1.8rem] font-black uppercase tracking-tighter text-[var(--foreground)] hover:text-[var(--primary)] relative"
+          >
+            <motion.span
+              className="absolute -bottom-1 left-0 h-[3px] bg-[var(--primary)] rounded-full"
+              initial={{ width: 0 }}
+              whileHover={{ width: "100%" }}
+              transition={{ duration: 0.4 }}
+            />
+            G<span className="">athr</span>
+          </MotionLink>
+
+          {/* Desktop Links — hidden (opacity-0) while Clerk resolves to prevent flicker */}
+          <div
+            className={`hidden md:flex items-center gap-8 transition-opacity duration-200 ${
+              authLoading ? "opacity-0 pointer-events-none" : "opacity-100"
+            }`}
+          >
+            {navLinks.map((link) => (
+              <MotionLink
+                key={link.href}
+                href={link.href}
+                whileHover={{
+                  scale: 1.05,
+                }}
+                transition={{
+                  scale: { type: "spring", stiffness: 260, damping: 15 },
+                }}
+                className={`uppercase px-3 py-1 text-[0.9rem] font-semibold tracking-wide focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] transition-all duration-200 ease-in-out relative hover:bg-[var(--primary)] hover:text-[var(--primary-foreground)] hover:rounded-full hover:no-underline ${
+                  pathname === link.href
+                    ? "text-[var(--primary)] dark:text-[var(--foreground)] font-extrabold underline underline-offset-4"
+                    : "text-[var(--muted-foreground)] hover:text-[var(--primary-foreground)]"
+                }`}
+              >
+                {getNavLabel(link.name)}
+                {link.name === "Cart" && cartItemCount > 0 && (
+                  <span className="absolute -top-1 -right-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {cartItemCount}
+                  </span>
+                )}
+                {role === "merchant" && link.name === "New Orders" && pendingOrdersCount > 0 && (
+                  <span className="absolute -top-1 -right-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                    {pendingOrdersCount}
+                  </span>
+                )}
+              </MotionLink>
+            ))}
+          </div>
+
+          {/* Right Side Icons + Profile — skeleton during Clerk load to prevent layout shift */}
+          <div className="hidden md:flex items-center gap-3" ref={menuRef}>
+            {/* Wishlist Icon (customers) — only show once auth is fully resolved */}
+            {mounted && isLoaded && role === "customer" && (
+              <button
+                aria-label={t("aria.wishlist")}
+                title={t("nav.wishlist")}
+                onClick={() => router.push("/customer/wishlist")}
+                className="relative rounded-full p-2 hover:bg-[var(--muted)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              >
+                <Heart className="w-5 h-5" />
+                {wishlistCount > 0 && (
+                  <span className="absolute -top-1 -right-1 bg-[var(--primary)] text-[var(--primary-foreground)] text-[10px] font-bold rounded-full h-4 min-w-4 px-1 flex items-center justify-center">
+                    {wishlistCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {mounted && isLoaded && isAdmin && (
+              <button
+                onClick={handleAdminLogout}
+                className="uppercase text-xs font-semibold border-2 border-[var(--border)] px-3 py-1.5 rounded-full bg-[var(--destructive)] text-white hover:opacity-90"
+                title={t("nav.adminLogout")}
+              >
+                {t("nav.adminLogout")}
+              </button>
+            )}
+
+            {/* Auth action area — stable skeleton prevents layout jumps */}
+            {!mounted || !isLoaded ? (
+              <div className="w-9 h-9 rounded-full bg-[var(--muted)] animate-pulse" />
+            ) : isSignedIn ? (
+              <div className="relative">
+                <motion.button
+                  whileHover={{ scale: 1.1, rotate: 2 }}
+                  onClick={() => setIsProfileOpen(!isProfileOpen)}
+                  aria-haspopup="menu"
+                  aria-expanded={isProfileOpen}
+                  title={user?.fullName || user?.username || user?.primaryEmailAddress?.emailAddress || t("labels.account")}
+                  className="pt-2"
+                >
+                  <img
+                    src={profileImage}
+                    alt="User"
+                    referrerPolicy="no-referrer"
+                    className="w-9 h-9 rounded-full border-2 border-[color:var(--border)] hover:border-[color:var(--primary)] transition-all object-cover"
+                  />
+                </motion.button>
+
+                <AnimatePresence>
+                  {isProfileOpen && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                      transition={{ duration: 0.25 }}
+                      className="absolute right-0 mt-3 w-56 bg-[var(--popover)] text-[var(--popover-foreground)] rounded-xl shadow-lg border border-[var(--border)] overflow-hidden z-50"
+                    >
+                      <button
+                        className="w-full text-left px-4 py-3 border-b border-[var(--border)] hover:bg-[var(--accent)]/40"
+                        onClick={() => { setIsProfileOpen(false); router.push(profileHref); }}
+                      >
+                        <div className="text-sm font-semibold truncate">{user?.fullName || user?.username || t("labels.account")}</div>
+                        {user?.primaryEmailAddress?.emailAddress && (
+                          <div className="text-xs opacity-70 truncate">{user.primaryEmailAddress.emailAddress}</div>
+                        )}
+                      </button>
+                      {role === "merchant" && (
+                        <button
+                          className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--accent)]/40 border-b border-[var(--border)]"
+                          onClick={() => { setIsProfileOpen(false); router.push('/merchant/updateShop'); }}
+                        >
+                          {t("nav.updateShop")}
+                        </button>
+                      )}
+                      <button
+                        className="w-full text-left px-4 py-2 text-sm hover:bg-[var(--accent)]/40"
+                        onClick={async (e) => {
+                          e.preventDefault();
+                          try { setIsProfileOpen(false); } catch {}
+                          await signOut({ redirectUrl: '/' });
+                        }}
+                      >
+                        {t("nav.signOut")}
+                      </button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            ) : (!isAdmin && (
+              <motion.button
+                whileHover={{ scale: 1.05, backgroundColor: "var(--muted)", color: "var(--foreground)" }}
+                onClick={() => router.push("/sign-in")}
+                suppressHydrationWarning={true}
+                className="uppercase text-sm font-semibold border-2 border-[var(--border)] px-5 py-1.5 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+              >
+                {t("nav.joinUs")}
+              </motion.button>
+            ))}
+            <LanguageSwitcher currentLanguage={currentLanguage} onChange={handleLanguageChange} t={t} />
+            <ThemeToggle />
+          </div>
+
+          {/* Mobile Menu Toggle */}
+          <motion.button
+            whileTap={{ scale: 0.9 }}
+            onClick={() => setMenuOpen(!menuOpen)}
+            className="md:hidden text-[var(--foreground)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]"
+            aria-label={menuOpen ? t("aria.closeMenu") : t("aria.openMenu")}
+          >
+            {menuOpen ? <X size={26} /> : <Menu size={26} />}
+          </motion.button>
+        </div>
+
+        {/* Mobile Menu */}
+        <AnimatePresence>
+          {menuOpen && (
+            <motion.div
+              key="mobileMenu"
+              initial={{ height: 0, opacity: 0, y: -20, filter: "blur(6px)" }}
+              animate={{ height: "auto", opacity: 1, y: 0, filter: "blur(0px)" }}
+              exit={{ height: 0, opacity: 0, y: -20, filter: "blur(6px)" }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="md:hidden flex flex-col bg-[var(--card)] border-t border-[var(--border)] overflow-hidden shadow-lg"
+            >
+              {navLinks.map((link) => (
+                <MotionLink
+                  key={link.href}
+                  href={link.href}
+                  onClick={() => setMenuOpen(false)}
+                  whileHover={{ x: 4 }}
+                  className={`py-3 px-6 font-semibold uppercase tracking-wide relative flex items-center justify-between transition-all duration-200 hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] ${
+                    pathname === link.href
+                      ? "text-[var(--primary)] dark:text-[var(--foreground)] font-extrabold underline underline-offset-4"
+                      : "text-[var(--muted-foreground)]"
+                  }`}
+                >
+                  <span>{getNavLabel(link.name)}</span>
+                  {link.name === "Cart" && cartItemCount > 0 && (
+                    <span className="bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {cartItemCount}
+                    </span>
+                  )}
+                  {role === "merchant" && link.name === "New Orders" && pendingOrdersCount > 0 && (
+                    <span className="bg-[var(--primary)] text-[var(--primary-foreground)] text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
+                      {pendingOrdersCount}
+                    </span>
+                  )}
+                </MotionLink>
+              ))}
+
+              <div className="flex items-center justify-between px-6 py-3 border-t border-[var(--border)]">
+                <span className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">{t("nav.theme")}</span>
+                <ThemeToggle />
+              </div>
+              <div className="flex items-center justify-between px-6 py-3 border-t border-[var(--border)]">
+                <span className="text-xs uppercase tracking-wide text-[var(--muted-foreground)]">{t("nav.language")}</span>
+                <LanguageSwitcher currentLanguage={currentLanguage} onChange={handleLanguageChange} t={t} />
+              </div>
+
+              <div className="border-t border-[#F15B3B]/30 mt-2 pt-2 px-6 pb-4">
+                {!mounted || !isLoaded ? (
+                  <div className="py-2 flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-full bg-[var(--muted)] animate-pulse" />
+                    <div className="w-24 h-4 bg-[var(--muted)] animate-pulse rounded" />
+                  </div>
+                ) : isAdmin ? (
+                  <button
+                    onClick={() => { handleAdminLogout(); setMenuOpen(false); }}
+                    className="w-full text-left py-2 font-semibold text-[var(--destructive)] hover:opacity-90"
+                  >
+                    {t("nav.adminLogout")}
+                  </button>
+                ) : isSignedIn ? (
+                  <>
+                    <button
+                      onClick={() => { router.push(profileHref); setMenuOpen(false); }}
+                      className="w-full text-left py-2 font-semibold hover:bg-[var(--accent)]/40 rounded-lg px-2"
+                    >
+                      {t("nav.profile")}
+                    </button>
+                    {role === "merchant" && (
+                      <button
+                        onClick={() => { router.push('/merchant/updateShop'); setMenuOpen(false); }}
+                        className="w-full text-left py-2 font-semibold hover:bg-[var(--accent)]/40 rounded-lg px-2"
+                      >
+                        {t("nav.updateShop")}
+                      </button>
+                    )}
+                    <div className="pt-2 pb-4 border-b border-[var(--border)]">
+                      <div className="text-sm font-semibold truncate">{user?.fullName || user?.username || t("labels.account")}</div>
+                      {user?.primaryEmailAddress?.emailAddress && (
+                        <div className="text-xs opacity-70 truncate">{user.primaryEmailAddress.emailAddress}</div>
+                      )}
+                    </div>
+                    <button
+                      className="w-full text-left py-2 font-semibold text-[var(--primary)] hover:opacity-90"
+                      onClick={async (e) => {
+                        e.preventDefault();
+                        try { setMenuOpen(false); } catch {}
+                        await signOut({ redirectUrl: '/' });
+                      }}
+                    >
+                      {t("nav.signOut")}
+                    </button>
+                  </>
+                ) : (!isAdmin && (
+                  <motion.button
+                    whileHover={{ scale: 1.05, backgroundColor: "var(--muted)", color: "var(--foreground)" }}
+                    onClick={() => { router.push("/sign-in"); setMenuOpen(false); }}
+                    suppressHydrationWarning={true}
+                    className="w-full mt-2 uppercase text-sm font-semibold border-2 border-[var(--border)] px-5 py-1.5 rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] transition"
+                  >
+                    {t("nav.joinUs")}
+                  </motion.button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </motion.nav>
+    </>
+  );
+}
