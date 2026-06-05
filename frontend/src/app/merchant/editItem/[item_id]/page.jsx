@@ -330,10 +330,18 @@ export default function EditItemPage() {
                 {formData.images && formData.images.length > 0 && (
                   <div className="grid grid-cols-5 gap-2 p-3 bg-[var(--card)] border-t border-[var(--border)]">
                     {formData.images.map((img, i) => (
-                      <button type="button" key={i} onClick={() => setActiveIndex(i)} className={`relative aspect-square rounded-md overflow-hidden border ${i === activeIndex ? 'border-[var(--primary)]' : 'border-[var(--border)]'}`} aria-label={`Select image ${i + 1}`}>
+                      <div
+                        key={i}
+                        onClick={() => setActiveIndex(i)}
+                        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveIndex(i); } }}
+                        role="button"
+                        tabIndex={0}
+                        className={`relative aspect-square rounded-md overflow-hidden border cursor-pointer ${i === activeIndex ? 'border-[var(--primary)]' : 'border-[var(--border)]'}`}
+                        aria-label={`Select image ${i + 1}`}
+                      >
                         <img src={img.url || img} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                         <button type="button" onClick={(e) => { e.stopPropagation(); handleRemoveImage(i) }} className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs" aria-label={`Remove image ${i + 1}`}>✕</button>
-                      </button>
+                      </div>
                     ))}
                   </div>
                 )}
