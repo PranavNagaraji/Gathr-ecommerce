@@ -12,7 +12,7 @@ import axios from "axios";
 import { useTranslation } from "react-i18next";
 import "@/lib/i18n";
 
-const MotionLink = motion(Link);
+const MotionLink = motion.create(Link);
 
 // --- Link configurations for different user roles ---
 const merchantLinks = [

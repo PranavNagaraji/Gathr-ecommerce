@@ -1,5 +1,5 @@
 'use client'
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useUser, useAuth } from "@clerk/nextjs";
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
@@ -159,6 +159,29 @@ export default function addItemPage() {
     const [isScanning, setIsScanning] = useState(false)
     const [notifModal, setNotifModal] = useState({ open: false, message: '', resolve: null })
     const [confirmModal, setConfirmModal] = useState({ open: false, message: '', resolve: null })
+    const [scanOverlay, setScanOverlay] = useState({ active: false, state: 'scanning', errorMsg: '' });
+    const scanAbortControllerRef = useRef(null);
+
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => {
+        setMounted(true);
+        return () => {
+            if (scanAbortControllerRef.current) {
+                scanAbortControllerRef.current.abort();
+            }
+        };
+    }, []);
+
+    const handleCancelScan = () => {
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
+            scanAbortControllerRef.current = null;
+        }
+        setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
+        setBarcodeBusy(false);
+        setIsScanning(false);
+        setBarcodeCenterOpen(false);
+    };
 
     const showNotificationModal = (message) => new Promise((resolve) => {
         setNotifModal({ open: true, message, resolve });
@@ -176,22 +199,36 @@ export default function addItemPage() {
     const handleManualBarcodeLookup = async () => {
         const code = String(barcodeManual || '').replace(/\D+/g, '');
         if (!code) return;
+
+        if (scanAbortControllerRef.current) {
+            scanAbortControllerRef.current.abort();
+        }
+        scanAbortControllerRef.current = new AbortController();
+        const signal = scanAbortControllerRef.current.signal;
+
+        setScanOverlay({ active: true, state: 'fetching', errorMsg: '' });
         setBarcodeBusy(true);
         try {
-            const prod = await fetchProductByBarcode(code);
+            const prod = await fetchProductByBarcode(code, signal);
+            if (signal.aborted) return;
+
             if (!prod) {
-                await showNotificationModal(`No product info found for barcode ${code}.`);
+                setScanOverlay({ active: true, state: 'error', errorMsg: `No product info found for barcode ${code}.` });
                 return;
             }
             let imgB64 = '';
             if (prod.img) {
-                try { imgB64 = await fetchImageUrlToBase64(prod.img); } catch {}
+                try { imgB64 = await fetchImageUrlToBase64(prod.img, signal); } catch {}
             }
+            if (signal.aborted) return;
+
             let priceVal = prod.price;
             if (!priceVal && prod.img) {
               const hints = [prod.name, ...(prod.categories||[])].filter(Boolean).join(', ');
-              priceVal = await estimatePriceFromImage(prod.img, hints);
+              priceVal = await estimatePriceFromImage(prod.img, hints, signal);
             }
+            if (signal.aborted) return;
+
             setFormData(prev => ({
                 ...prev,
                 name: prod.name || prev.name,
@@ -201,8 +238,16 @@ export default function addItemPage() {
                 price: priceVal ? String(priceVal) : prev.price
             }));
             setActiveIndex(0);
+            setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
+        } catch (err) {
+            if (err.name === 'AbortError' || signal.aborted) {
+                return;
+            }
+            setScanOverlay({ active: true, state: 'error', errorMsg: err.message || 'Failed to lookup product info.' });
         } finally {
-            setBarcodeBusy(false);
+            if (!signal.aborted) {
+                setBarcodeBusy(false);
+            }
         }
     };
 
@@ -213,8 +258,8 @@ export default function addItemPage() {
         reader.readAsDataURL(file);
     });
 
-    const fetchImageUrlToBase64 = async (url) => {
-        const res = await fetch(url);
+    const fetchImageUrlToBase64 = async (url, signal) => {
+        const res = await fetch(url, { signal });
         const blob = await res.blob();
         return await new Promise((resolve) => {
             const fr = new FileReader();
@@ -440,9 +485,9 @@ export default function addItemPage() {
         return '';
     };
 
-    const fetchProductByBarcode = async (code) => {
+    const fetchProductByBarcode = async (code, signal) => {
         try {
-            const resp = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`);
+            const resp = await fetch(`https://world.openfoodfacts.org/api/v0/product/${encodeURIComponent(code)}.json`, { signal });
             const data = await resp.json();
             if (data && data.status === 1) {
                 const p = data.product || {};
@@ -468,22 +513,25 @@ export default function addItemPage() {
         return null;
     };
 
-    const estimatePriceFromImage = async (imgUrl, hints) => {
+    const estimatePriceFromImage = async (imgUrl, hints, signal) => {
         try {
             const token = await getToken();
-            const base64 = await fetchImageUrlToBase64(imgUrl);
+            const base64 = await fetchImageUrlToBase64(imgUrl, signal);
             const b64 = base64.includes(',') ? base64.split(',')[1] : base64;
             let data = null;
             for (let attempt = 0; attempt < 2; attempt++) {
+                if (signal?.aborted) return null;
                 const resp = await fetch(`${API_URL}/api/merchant/ai/generateFromImage`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                    body: JSON.stringify({ clerkId: user.id, base64Image: b64, hints })
+                    body: JSON.stringify({ clerkId: user.id, base64Image: b64, hints }),
+                    signal
                 });
                 data = await resp.json().catch(()=>({}));
                 if (resp.ok && typeof data?.price === 'number' && data.price > 0) {
                     return Math.round(data.price);
                 }
+                if (signal?.aborted) return null;
                 await new Promise(r => setTimeout(r, 250));
             }
         } catch {}
@@ -645,6 +693,18 @@ export default function addItemPage() {
 
         else await showNotificationModal(`Error saving item details: ${data.message}`);
     };
+
+    if (!mounted) {
+        return (
+            <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+                <div className="flex flex-col items-center gap-3">
+                    <div className="w-10 h-10 rounded-full border-4 border-[var(--primary)] border-t-transparent animate-spin" />
+                    <p className="text-[var(--muted-foreground)] text-sm animate-pulse">Loading form...</p>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <ConfigProvider
             theme={{
@@ -682,15 +742,15 @@ export default function addItemPage() {
                           <button
                             type="button"
                             onClick={handleScanToggle}
-                            disabled={barcodeBusy}
-                            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 ${isScanning ? 'ring-2 ring-[var(--ring)]' : ''}`}
+                            disabled={barcodeBusy || scanOverlay.active}
+                            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed ${isScanning ? 'ring-2 ring-[var(--ring)]' : ''} ${scanOverlay.active ? '!bg-gray-400 !text-gray-200 dark:!bg-gray-700 dark:!text-gray-500' : ''}`}
                           >
                             {isScanning ? 'Scanning…' : 'Scan'}
                           </button>
                           {barcodeMenuOpen && (
                             <div className="absolute z-[10000] mt-2 w-56 rounded-md border border-[var(--border)] bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
-                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => barcodeCameraRef.current && barcodeCameraRef.current.click()} disabled={barcodeBusy}>Use Camera</button>
-                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => barcodeUploadRef.current && barcodeUploadRef.current.click()} disabled={barcodeBusy}>Upload Photo</button>
+                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => barcodeCameraRef.current && barcodeCameraRef.current.click()} disabled={barcodeBusy || scanOverlay.active}>Use Camera</button>
+                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => barcodeUploadRef.current && barcodeUploadRef.current.click()} disabled={barcodeBusy || scanOverlay.active}>Upload Photo</button>
                             </div>
                           )}
                           <input ref={barcodeCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e)=> onBarcodeImageChosen(e.target.files?.[0])} />
@@ -702,10 +762,11 @@ export default function addItemPage() {
                             inputMode="numeric"
                             placeholder="Enter barcode manually"
                             value={barcodeManual}
+                            disabled={barcodeBusy || scanOverlay.active}
                             onChange={(e)=> setBarcodeManual(e.target.value)}
-                            className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)]"
+                            className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] disabled:opacity-50 disabled:cursor-not-allowed"
                           />
-                          <button type="button" onClick={handleManualBarcodeLookup} disabled={barcodeBusy || !barcodeManual.trim()} className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] disabled:opacity-60">Lookup</button>
+                          <button type="button" onClick={handleManualBarcodeLookup} disabled={barcodeBusy || scanOverlay.active || !barcodeManual.trim()} className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] disabled:opacity-60 disabled:cursor-not-allowed">Lookup</button>
                         </div>
                       </div>
                       {/* advanced band slider removed in favor of visual centering modal */}
@@ -995,57 +1056,88 @@ export default function addItemPage() {
                       </div>
                       <button type="button" onClick={()=> { setBarcodeCenterScale(1); setBarcodeCenterOffset({x:0,y:0}); setBarcodeCenterRotate(0); }} className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">Reset</button>
                       <button type="button" disabled={barcodeBusy} onClick={async ()=>{
+                        if (scanAbortControllerRef.current) {
+                            scanAbortControllerRef.current.abort();
+                        }
+                        scanAbortControllerRef.current = new AbortController();
+                        const signal = scanAbortControllerRef.current.signal;
+
+                        setScanOverlay({ active: true, state: 'scanning', errorMsg: '' });
                         setBarcodeBusy(true);
                         try {
                           // render a new aligned image into canvas for decode
                           const img = new Image();
-                          img.onload = async () => {
-                            const W = 1280, H = 720; // wide canvas for barcode
-                            const canvas = document.createElement('canvas');
-                            canvas.width = W; canvas.height = H;
-                            const ctx = canvas.getContext('2d');
-                            ctx.fillStyle = '#fff';
-                            ctx.fillRect(0,0,W,H);
-                            ctx.save();
-                            ctx.translate(W/2 + barcodeCenterOffset.x, H/2 + barcodeCenterOffset.y);
-                            ctx.rotate((barcodeCenterRotate * Math.PI)/180);
-                            const iw = img.width * barcodeCenterScale;
-                            const ih = img.height * barcodeCenterScale;
-                            ctx.drawImage(img, -iw/2, -ih/2, iw, ih);
-                            ctx.restore();
-                            const aligned = canvas.toDataURL('image/png');
-                            const code = await decodeAny(aligned);
-                            if (!code) {
-                              await showNotificationModal('No barcode detected after centering. Try adjusting zoom/position/rotation.');
-                              return;
-                            }
-                            const prod = await fetchProductByBarcode(code, formData.price);
-                            if (!prod) {
-                              await showNotificationModal(`No product info found for barcode ${code}.`);
-                              return;
-                            }
-                            let imgB64 = '';
-                            if (prod.img) { try { imgB64 = await fetchImageUrlToBase64(prod.img); } catch {} }
-                            let priceVal = prod.price;
-                            if (!priceVal && prod.img) {
-                              const hints = [prod.name, ...(prod.categories||[])].filter(Boolean).join(', ');
-                              priceVal = await estimatePriceFromImage(prod.img, hints);
-                            }
-                            setFormData(prev => ({
-                              ...prev,
-                              name: prod.name || prev.name,
-                              description: prod.desc || prev.description,
-                              category: Array.from(new Set([...(prev.category||[]), ...((prod.categories||[]))])),
-                              images: imgB64 ? [imgB64, ...(prev.images||[])] : prev.images,
-                              price: priceVal ? String(priceVal) : prev.price
-                            }));
-                            setActiveIndex(0);
-                            setBarcodeCenterOpen(false);
-                            setIsScanning(false);
-                          };
+                          const imgLoadPromise = new Promise((resolve, reject) => {
+                            img.onload = () => resolve(img);
+                            img.onerror = () => reject(new Error('Failed to load alignment image.'));
+                          });
                           img.src = barcodeLastImage || '';
+                          
+                          await imgLoadPromise;
+                          if (signal.aborted) return;
+
+                          const W = 1280, H = 720; // wide canvas for barcode
+                          const canvas = document.createElement('canvas');
+                          canvas.width = W; canvas.height = H;
+                          const ctx = canvas.getContext('2d');
+                          ctx.fillStyle = '#fff';
+                          ctx.fillRect(0,0,W,H);
+                          ctx.save();
+                          ctx.translate(W/2 + barcodeCenterOffset.x, H/2 + barcodeCenterOffset.y);
+                          ctx.rotate((barcodeCenterRotate * Math.PI)/180);
+                          const iw = img.width * barcodeCenterScale;
+                          const ih = img.height * barcodeCenterScale;
+                          ctx.drawImage(img, -iw/2, -ih/2, iw, ih);
+                          ctx.restore();
+                          const aligned = canvas.toDataURL('image/png');
+                          const code = await decodeAny(aligned);
+                          if (signal.aborted) return;
+
+                          if (!code) {
+                            setScanOverlay({ active: true, state: 'error', errorMsg: 'No barcode detected after centering. Try adjusting zoom/position/rotation.' });
+                            return;
+                          }
+
+                          setScanOverlay({ active: true, state: 'fetching', errorMsg: '' });
+                          const prod = await fetchProductByBarcode(code, signal);
+                          if (signal.aborted) return;
+
+                          if (!prod) {
+                            setScanOverlay({ active: true, state: 'error', errorMsg: `No product info found for barcode ${code}.` });
+                            return;
+                          }
+                          let imgB64 = '';
+                          if (prod.img) { try { imgB64 = await fetchImageUrlToBase64(prod.img, signal); } catch {} }
+                          if (signal.aborted) return;
+
+                          let priceVal = prod.price;
+                          if (!priceVal && prod.img) {
+                            const hints = [prod.name, ...(prod.categories||[])].filter(Boolean).join(', ');
+                            priceVal = await estimatePriceFromImage(prod.img, hints, signal);
+                          }
+                          if (signal.aborted) return;
+
+                          setFormData(prev => ({
+                            ...prev,
+                            name: prod.name || prev.name,
+                            description: prod.desc || prev.description,
+                            category: Array.from(new Set([...(prev.category||[]), ...((prod.categories||[]))])),
+                            images: imgB64 ? [imgB64, ...(prev.images||[])] : prev.images,
+                            price: priceVal ? String(priceVal) : prev.price
+                          }));
+                          setActiveIndex(0);
+                          setBarcodeCenterOpen(false);
+                          setIsScanning(false);
+                          setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
+                        } catch (err) {
+                          if (err.name === 'AbortError' || signal.aborted) {
+                            return;
+                          }
+                          setScanOverlay({ active: true, state: 'error', errorMsg: err.message || 'An error occurred during barcode scanning.' });
                         } finally {
-                          setBarcodeBusy(false);
+                          if (!signal.aborted) {
+                            setBarcodeBusy(false);
+                          }
                         }
                       }} className="px-4 py-2 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-60">{barcodeBusy ? 'Decoding…' : 'Apply & Decode'}</button>
                     </div>
@@ -1073,6 +1165,57 @@ export default function addItemPage() {
                     <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(false); }} className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">No</button>
                     <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">Yes</button>
                   </div>
+                </div>
+              </div>
+            )}
+            {scanOverlay.active && (
+              <div className="fixed inset-0 z-[20000] bg-black/75 flex flex-col items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
+                <div className="w-[90vw] max-w-md bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-6">
+                  {/* Status Indicator */}
+                  {scanOverlay.state === 'scanning' && (
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <div className="relative w-16 h-16 flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border-4 border-t-[var(--primary)] border-[var(--border)] animate-spin" />
+                        <svg className="w-8 h-8 text-[var(--primary)] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h.01M16 12h.01M21 12h.01M12 16h.01M12 20h.01M4 12h.01M4 4h16v16H4V4z" />
+                        </svg>
+                      </div>
+                      <p className="text-lg font-semibold text-[var(--foreground)] animate-pulse">Scanning barcode…</p>
+                    </div>
+                  )}
+
+                  {scanOverlay.state === 'fetching' && (
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <div className="relative w-16 h-16 flex items-center justify-center">
+                        <div className="absolute inset-0 rounded-full border-4 border-[var(--primary)] border-t-transparent animate-spin animate-pulse" />
+                        <svg className="w-8 h-8 text-[var(--primary)] animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                        </svg>
+                      </div>
+                      <p className="text-lg font-semibold text-[var(--foreground)] animate-pulse">Fetching item details…</p>
+                    </div>
+                  )}
+
+                  {scanOverlay.state === 'error' && (
+                    <div className="flex flex-col items-center gap-4 text-center">
+                      <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
+                        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                      <p className="text-lg font-semibold text-[var(--foreground)]">Scan Failed</p>
+                      <p className="text-sm text-[var(--muted-foreground)] max-h-32 overflow-y-auto px-2">{scanOverlay.errorMsg}</p>
+                    </div>
+                  )}
+
+                  {/* Cancel / Close Button */}
+                  <button
+                    type="button"
+                    onClick={handleCancelScan}
+                    className="w-full py-2.5 px-4 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] font-semibold transition-colors mt-2"
+                  >
+                    {scanOverlay.state === 'error' ? 'Close' : 'Cancel'}
+                  </button>
                 </div>
               </div>
             )}
