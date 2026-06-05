@@ -6,6 +6,7 @@ import axios from "axios"
 // 🔹 Import AntD components
 import { Select, Input, ConfigProvider, theme, Spin } from "antd"
 import { useTheme } from "@/components/theme/ThemeProvider"
+import toast from 'react-hot-toast';
 
 export default function EditItemPage() {
   const router = useRouter()
@@ -78,15 +79,7 @@ export default function EditItemPage() {
   const [otherCategory, setOtherCategory] = useState("")
   // 🔹 Carousel state
   const [activeIndex, setActiveIndex] = useState(0)
-  const [notifModal, setNotifModal] = useState({ open: false, message: '', resolve: null })
-  const [confirmModal, setConfirmModal] = useState({ open: false, message: '', resolve: null })
 
-  const showNotificationModal = (message) => new Promise((resolve) => {
-    setNotifModal({ open: true, message, resolve })
-  })
-  const showConfirmModal = (message) => new Promise((resolve) => {
-    setConfirmModal({ open: true, message, resolve })
-  })
 
   // ... (useEffect and fetchItem logic is unchanged) ...
   useEffect(() => {
@@ -132,7 +125,7 @@ export default function EditItemPage() {
         }
       } catch (err) {
         console.error("Error fetching item:", err)
-        await showNotificationModal("Failed to load item details")
+        toast.error("Failed to load item details")
       } finally {
         setLoading(false)
       }
@@ -250,6 +243,7 @@ export default function EditItemPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!user || !isLoaded || !isSignedIn) return
+    const toastId = toast.loading("Updating item...")
     setSaving(true)
 
     try {
@@ -266,15 +260,15 @@ export default function EditItemPage() {
       )
 
       if (res.status === 200) {
-        await showNotificationModal("Item updated successfully!")
+        toast.success("Item updated successfully!", { id: toastId })
         router.push("/merchant/dashboard")
       } else {
-        await showNotificationModal(friendlyItemError(res.data))
+        toast.error(friendlyItemError(res.data), { id: toastId })
       }
     } catch (err) {
       console.error("Error updating item:", err)
       const data = err.response?.data
-      await showNotificationModal(friendlyItemError(data || {}))
+      toast.error(friendlyItemError(data || {}), { id: toastId })
     } finally {
       setSaving(false)
     }
@@ -344,29 +338,6 @@ export default function EditItemPage() {
           </div>
         </div>
       </div>
-      {notifModal.open && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-          <div className="w-[90vw] max-w-lg rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-[var(--border)] font-semibold">Notice</div>
-            <div className="p-5 text-sm leading-relaxed">{notifModal.message}</div>
-            <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
-              <button type="button" onClick={()=>{ const r = notifModal.resolve; setNotifModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">OK</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {confirmModal.open && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-          <div className="w-[90vw] max-w-md rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-[var(--border)] font-semibold">Confirm</div>
-            <div className="p-5 text-sm">{confirmModal.message}</div>
-            <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
-              <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(false); }} className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">No</button>
-              <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">Yes</button>
-            </div>
-          </div>
-        </div>
-      )}
     </>
   )
 
@@ -488,29 +459,7 @@ export default function EditItemPage() {
           </div>
         </div>
       </div>
-      {notifModal.open && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-          <div className="w-[90vw] max-w-lg rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-[var(--border)] font-semibold">Notice</div>
-            <div className="p-5 text-sm leading-relaxed">{notifModal.message}</div>
-            <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
-              <button type="button" onClick={()=>{ const r = notifModal.resolve; setNotifModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">OK</button>
-            </div>
-          </div>
-        </div>
-      )}
-      {confirmModal.open && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-          <div className="w-[90vw] max-w-md rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-            <div className="p-4 border-b border-[var(--border)] font-semibold">Confirm</div>
-            <div className="p-5 text-sm">{confirmModal.message}</div>
-            <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
-              <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(false); }} className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">No</button>
-              <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">Yes</button>
-            </div>
-          </div>
-        </div>
-      )}
+
     </ConfigProvider>
   )
 }

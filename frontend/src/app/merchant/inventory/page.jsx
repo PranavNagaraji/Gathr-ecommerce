@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import { Input, Select } from "antd";
 import AnimatedButton from "@/components/ui/AnimatedButton";
+import toast from "react-hot-toast";
 
 export default function InventoryPage() {
   const router = useRouter();
@@ -36,6 +37,7 @@ export default function InventoryPage() {
         setCategories(["All Categories", ...allCategories]);
       } catch (err) {
         console.log(`err: ${err.message}`);
+        toast.error("Failed to load inventory items.");
       } finally {
         setLoading(false);
       }
@@ -43,19 +45,50 @@ export default function InventoryPage() {
     getItems();
   }, [isLoaded, isSignedIn, user, API_URL, getToken]);
 
-  const handleDelete = async (itemId) => {
+  const handleDelete = (itemId) => {
     if (!isLoaded || !isSignedIn || !user) return;
-    if (!confirm("Are you sure you want to delete this item?")) return;
-    const token = await getToken();
-    try {
-      const result = await axios.delete(`${API_URL}/api/merchant/delete_item`, {
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        data: { item_id: itemId, clerk_id: user.id },
-      });
-      if (result.status === 200) setItems((prev) => prev.filter((it) => it.id !== itemId));
-    } catch (err) {
-      console.error("Error deleting item:", err.response?.data || err.message);
-    }
+    
+    toast((t) => (
+      <div className="flex flex-col gap-2 p-1">
+        <p className="text-sm font-medium text-[var(--foreground)]">Are you sure you want to delete this item?</p>
+        <div className="flex justify-end gap-2 mt-1">
+          <button
+            onClick={() => toast.dismiss(t.id)}
+            className="px-2 py-1 text-xs rounded border border-[var(--border)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={async () => {
+              toast.dismiss(t.id);
+              const token = await getToken();
+              const toastId = toast.loading("Deleting item...");
+              try {
+                const result = await axios.delete(`${API_URL}/api/merchant/delete_item`, {
+                  headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                  data: { item_id: itemId, clerk_id: user.id },
+                });
+                if (result.status === 200) {
+                  setItems((prev) => prev.filter((it) => it.id !== itemId));
+                  toast.success("Item deleted successfully", { id: toastId });
+                } else {
+                  toast.error("Failed to delete item", { id: toastId });
+                }
+              } catch (err) {
+                console.error("Error deleting item:", err.response?.data || err.message);
+                toast.error(err.response?.data?.message || "Error deleting item", { id: toastId });
+              }
+            }}
+            className="px-2.5 py-1 text-xs rounded bg-[var(--destructive)] text-white hover:opacity-90 transition-opacity font-semibold"
+          >
+            Delete
+          </button>
+        </div>
+      </div>
+    ), {
+      duration: 6000,
+      position: "top-center"
+    });
   };
 
   const handleEdit = (itemId) => router.push(`/merchant/editItem/${itemId}`);

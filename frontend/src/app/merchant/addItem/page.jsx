@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Select, ConfigProvider, theme, Input as AntInput } from 'antd'
 import { useTheme } from '@/components/theme/ThemeProvider'
+import toast from 'react-hot-toast';
 
 export default function addItemPage() {
     const { theme: currentTheme } = useTheme();
@@ -192,8 +193,6 @@ export default function addItemPage() {
     const [barcodeCenterRotate, setBarcodeCenterRotate] = useState(0)
     const barcodeCenterDrag = useRef(null)
     const [isScanning, setIsScanning] = useState(false)
-    const [notifModal, setNotifModal] = useState({ open: false, message: '', resolve: null })
-    const [confirmModal, setConfirmModal] = useState({ open: false, message: '', resolve: null })
     const [scanOverlay, setScanOverlay] = useState({ active: false, state: 'scanning', errorMsg: '' });
     const scanAbortControllerRef = useRef(null);
 
@@ -218,12 +217,7 @@ export default function addItemPage() {
         setBarcodeCenterOpen(false);
     };
 
-    const showNotificationModal = (message) => new Promise((resolve) => {
-        setNotifModal({ open: true, message, resolve });
-    })
-    const showConfirmModal = (message) => new Promise((resolve) => {
-        setConfirmModal({ open: true, message, resolve });
-    })
+
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -661,9 +655,10 @@ export default function addItemPage() {
     const handleGenerateAI = async () => {
         if (!isLoaded || !isSignedIn || !user) return;
         if (!formData.images || formData.images.length === 0) {
-            await showNotificationModal('Please upload at least one image first.');
+            toast.error('Please upload at least one image first.');
             return;
         }
+        const toastId = toast.loading("AI generating item description...");
         try {
             setAiLoading(true);
             const token = await getToken();
@@ -694,13 +689,14 @@ export default function addItemPage() {
                 }
             }
             if (lastErr) throw lastErr;
+            toast.success("AI description generated successfully!", { id: toastId });
         } catch (e) {
             const raw = String(e && e.message ? e.message : '');
             const lower = raw.toLowerCase();
             const friendly = lower.includes('model did not return expected json')
                 ? 'AI could not generate description right now. Please try again.'
                 : (raw ? `AI error: ${raw}` : 'AI error: Something went wrong while generating description.');
-            await showNotificationModal(friendly);
+            toast.error(friendly, { id: toastId });
         } finally {
             setAiLoading(false);
         }
@@ -742,21 +738,26 @@ export default function addItemPage() {
             ...formData,
             owner_id: user.id,
         };
-        const res = await fetch(`${API_URL}/api/merchant/add_items`, {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${token}`,
-            },
-            body: JSON.stringify(body),
-        });
+        const toastId = toast.loading("Saving item details...");
+        try {
+            const res = await fetch(`${API_URL}/api/merchant/add_items`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${token}`,
+                },
+                body: JSON.stringify(body),
+            });
 
-        const data = await res.json();
-        if (res.ok) {
-            await showNotificationModal("Item details saved!");
-            router.push("/merchant/dashboard");
-        } else {
-            await showNotificationModal(friendlyItemError(data));
+            const data = await res.json();
+            if (res.ok) {
+                toast.success("Item details saved!", { id: toastId });
+                router.push("/merchant/dashboard");
+            } else {
+                toast.error(friendlyItemError(data), { id: toastId });
+            }
+        } catch (err) {
+            toast.error("Failed to save item details.", { id: toastId });
         }
     };
 
@@ -1216,29 +1217,7 @@ export default function addItemPage() {
                 </div>
               </div>
             )}
-            {notifModal.open && (
-              <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-                <div className="w-[90vw] max-w-lg rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-                  <div className="p-4 border-b border-[var(--border)] font-semibold">Notice</div>
-                  <div className="p-5 text-sm leading-relaxed">{notifModal.message}</div>
-                  <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
-                    <button type="button" onClick={()=>{ const r = notifModal.resolve; setNotifModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">OK</button>
-                  </div>
-                </div>
-              </div>
-            )}
-            {confirmModal.open && (
-              <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-                <div className="w-[90vw] max-w-md rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-                  <div className="p-4 border-b border-[var(--border)] font-semibold">Confirm</div>
-                  <div className="p-5 text-sm">{confirmModal.message}</div>
-                  <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
-                    <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(false); }} className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">No</button>
-                    <button type="button" onClick={()=>{ const r = confirmModal.resolve; setConfirmModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">Yes</button>
-                  </div>
-                </div>
-              </div>
-            )}
+
             {scanOverlay.active && (
               <div className="fixed inset-0 z-[20000] bg-black/75 flex flex-col items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
                 <div className="w-[90vw] max-w-md bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-6">
