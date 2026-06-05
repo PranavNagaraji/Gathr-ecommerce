@@ -29,11 +29,11 @@ const UpdateShop = () => {
     contact: "",
     account_no: "",
     mobile_no: "",
-    upi_id: "",
     category: [],
     image: null,
     location: { latitude: 20.5937, longitude: 78.9629 }, // Default location
   });
+  const [fieldErrors, setFieldErrors] = useState({});
 
   const [imagePreview, setImagePreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -126,7 +126,6 @@ const UpdateShop = () => {
             contact: shopData.contact || "",
             account_no: shopData.account_no || "",
             mobile_no: shopData.mobile_no || "",
-            upi_id: shopData.upi_id || "",
             category: shopData.category || [],
             location: safeLocation, // Set the safe, numbered location
             owner_id: user.id,
@@ -294,6 +293,21 @@ const UpdateShop = () => {
   // ✅ Submit form
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    const errors = {};
+    if (!/^\d{9,18}$/.test((formData.account_no || '').trim())) {
+      errors.account_no = "Account number must be 9\u201318 digits.";
+    }
+    if (!/^[6-9]\d{9}$/.test((formData.mobile_no || '').trim())) {
+      errors.mobile_no = "Enter a valid 10-digit Indian mobile number (starting with 6\u20139).";
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+
     const token = await getToken();
 
     // --- FIX 2: Map frontend 'location' to backend 'Location' ---
@@ -349,20 +363,38 @@ const UpdateShop = () => {
           </p>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-5 max-w-2xl">
-            {["shop_name", "contact", "account_no", "mobile_no", "upi_id"].map((field) => (
-              <div key={field}>
-                <label className="block text-[var(--muted-foreground)] mb-1 capitalize">
-                  {field.replace("_", " ")}
-                </label>
-                <input
-                  type="text"
-                  name={field}
-                  value={formData[field]}
-                  onChange={handleChange}
-                  className="w-full rounded-lg bg-[var(--card)] text-[var(--foreground)] px-3 py-2 border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]"
-                />
-              </div>
-            ))}
+            {["shop_name", "contact", "account_no", "mobile_no"].map((field) => {
+              const isRequired = ["account_no", "mobile_no"].includes(field);
+              const label = field === 'account_no'
+                ? 'Account Number *'
+                : field === 'mobile_no'
+                ? 'Mobile Number *'
+                : field.replace("_", " ");
+              return (
+                <div key={field}>
+                  <label className="block text-[var(--muted-foreground)] mb-1 capitalize">
+                    {label}
+                  </label>
+                  <input
+                    type="text"
+                    name={field}
+                    value={formData[field] || ""}
+                    onChange={(e) => {
+                      handleChange(e);
+                      if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
+                    }}
+                    required={isRequired}
+                    inputMode={['account_no', 'mobile_no'].includes(field) ? 'numeric' : 'text'}
+                    className={`w-full rounded-lg bg-[var(--card)] text-[var(--foreground)] px-3 py-2 border focus:outline-none focus:ring-2 focus:ring-[var(--ring)] ${
+                      fieldErrors[field] ? 'border-red-500' : 'border-[var(--border)]'
+                    }`}
+                  />
+                  {fieldErrors[field] && (
+                    <p className="text-red-500 text-xs mt-1">{fieldErrors[field]}</p>
+                  )}
+                </div>
+              );
+            })}
           </div>
 
           {/* --- FIX 3: Removed 'relative z-50' to fix Places API --- */}

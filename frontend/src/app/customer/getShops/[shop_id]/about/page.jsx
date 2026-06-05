@@ -121,10 +121,6 @@ export default function ShopAboutPage() {
 
                 <div className="space-y-2">
                   <div>
-                    <div className="text-sm text-[var(--muted-foreground)]">UPI ID</div>
-                    <div className="font-medium">{shop.upi_id || "-"}</div>
-                  </div>
-                  <div>
                     <div className="text-sm text-[var(--muted-foreground)]">Account No.</div>
                     <div className="font-medium">{shop.account_no || "-"}</div>
                   </div>

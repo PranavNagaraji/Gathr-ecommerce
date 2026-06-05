@@ -10,7 +10,7 @@ const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
 // edit_shop function
 export const updateShop = async (req, res) => {
     try {
-        const { owner_id, Location, address, shop_name, contact, account_no, mobile_no, upi_id, image, category } = req.body;
+        const { owner_id, Location, address, shop_name, contact, account_no, mobile_no, image, category } = req.body;
 
         const { data: user, error: userError } = await supabase
             .from('Users')
@@ -34,7 +34,6 @@ export const updateShop = async (req, res) => {
                 contact,
                 account_no,
                 mobile_no,
-                upi_id,
                 category
             })
             .eq('owner_id', user.id)

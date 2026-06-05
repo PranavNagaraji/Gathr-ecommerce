@@ -33,10 +33,11 @@ export default function CreateShop() {
 
   const [formData, setFormData] = useState({
     shop_name: "", address: "", contact: "",
-    account_no: "", mobile_no: "", upi_id: "",
+    account_no: "", mobile_no: "",
     category: [], image: null,
     location: { latitude: 17.385044, longitude: 78.486671 }, // Hyderabad default
   });
+  const [fieldErrors, setFieldErrors] = useState({});
   const [otherCategory, setOtherCategory] = useState("");
 
   // ── Address autocomplete state ──────────────────────────────────────────────
@@ -222,6 +223,21 @@ export default function CreateShop() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+
+    // Validate required fields
+    const errors = {};
+    if (!/^\d{9,18}$/.test(formData.account_no.trim())) {
+      errors.account_no = "Account number must be 9–18 digits.";
+    }
+    if (!/^[6-9]\d{9}$/.test(formData.mobile_no.trim())) {
+      errors.mobile_no = "Enter a valid 10-digit Indian mobile number (starting with 6–9).";
+    }
+    if (Object.keys(errors).length > 0) {
+      setFieldErrors(errors);
+      return;
+    }
+    setFieldErrors({});
+
     const token = await getToken();
     const body = { ...formData, owner_id: user.id, Location: formData.location };
     const res = await fetch(`${API_URL}/api/merchant/add_shop`, {
@@ -279,21 +295,40 @@ export default function CreateShop() {
 
               {/* Basic fields */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {['shop_name', 'contact', 'account_no', 'mobile_no', 'upi_id'].map((field) => (
-                  <div key={field}>
-                    <Typography variant="subtitle2" sx={{ color: 'var(--muted-foreground)', fontWeight: 600, mb: 0.5 }}>
-                      {field.replace(/_/g, ' ').toUpperCase()}
-                    </Typography>
-                    <input
-                      type="text"
-                      name={field}
-                      value={formData[field] || ''}
-                      onChange={handleChange}
-                      required={field === 'shop_name'}
-                      className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-base p-2 focus:outline-none focus:border-[var(--ring)] transition-colors"
-                    />
-                  </div>
-                ))}
+                {['shop_name', 'contact', 'account_no', 'mobile_no'].map((field) => {
+                  const isRequired = ['shop_name', 'account_no', 'mobile_no'].includes(field);
+                  const label = field === 'account_no'
+                    ? 'ACCOUNT NUMBER *'
+                    : field === 'mobile_no'
+                    ? 'MOBILE NUMBER *'
+                    : field === 'shop_name'
+                    ? 'SHOP NAME *'
+                    : field.replace(/_/g, ' ').toUpperCase();
+                  return (
+                    <div key={field}>
+                      <Typography variant="subtitle2" sx={{ color: 'var(--muted-foreground)', fontWeight: 600, mb: 0.5 }}>
+                        {label}
+                      </Typography>
+                      <input
+                        type="text"
+                        name={field}
+                        value={formData[field] || ''}
+                        onChange={(e) => {
+                          handleChange(e);
+                          if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
+                        }}
+                        required={isRequired}
+                        inputMode={['account_no', 'mobile_no'].includes(field) ? 'numeric' : 'text'}
+                        className={`w-full bg-transparent border-b-2 text-[var(--foreground)] text-base p-2 focus:outline-none transition-colors ${
+                          fieldErrors[field] ? 'border-red-500 focus:border-red-500' : 'border-[var(--border)] focus:border-[var(--ring)]'
+                        }`}
+                      />
+                      {fieldErrors[field] && (
+                        <p className="text-red-500 text-xs mt-1">{fieldErrors[field]}</p>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Address with smart predictions */}

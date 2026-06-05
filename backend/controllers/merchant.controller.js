@@ -11,7 +11,7 @@ const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
 // add_shop function to create a new shop
 export const add_shop = async (req, res) => {
   try {
-    const { owner_id, Location, address, shop_name, contact, account_no, mobile_no, upi_id, image, category } = req.body;
+    const { owner_id, Location, address, shop_name, contact, account_no, mobile_no, image, category } = req.body;
     
     const { data: user, error: userError } = await supabase
       .from('Users')
@@ -37,7 +37,6 @@ export const add_shop = async (req, res) => {
       contact,
       account_no,
       mobile_no,
-      upi_id,
       image: null,
       category
     }).select().single();

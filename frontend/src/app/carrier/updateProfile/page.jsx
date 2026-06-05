@@ -21,6 +21,7 @@ export default function UpdateCarrier() {
         bankAccount: '',
         profilePic: null,
     });
+    const [bankAccountError, setBankAccountError] = useState('');
     const [preview, setPreview] = useState(null);
 
     // Fetch carrier info on mount
@@ -72,6 +73,13 @@ export default function UpdateCarrier() {
 
     const handleSubmit = async (e) => {
         e.preventDefault();
+
+        // Validate bank account
+        if (!/^\d{9,18}$/.test((form.bankAccount || '').trim())) {
+            setBankAccountError('Bank account number must be 9\u201318 digits.');
+            return;
+        }
+        setBankAccountError('');
 
         let imageData = form.profilePic;
         if (form.profilePic && typeof form.profilePic !== 'string' && !form.profilePic.url) {
@@ -161,17 +169,23 @@ export default function UpdateCarrier() {
                         />
 
                         <TextField
-                            label="Bank Account"
+                            label="Bank Account Number *"
                             value={form.bankAccount}
                             name="bankAccount"
-                            onChange={handleChange}
+                            onChange={(e) => {
+                                handleChange(e);
+                                if (bankAccountError) setBankAccountError('');
+                            }}
                             fullWidth
                             variant="outlined"
+                            required
+                            inputProps={{ style: { color: 'var(--card-foreground)' }, inputMode: 'numeric' }}
                             InputLabelProps={{ style: { color: 'var(--muted-foreground)' } }}
-                            inputProps={{ style: { color: 'var(--card-foreground)' } }}
+                            error={!!bankAccountError}
+                            helperText={bankAccountError || 'Required: 9\u201318 digits'}
                             sx={{
                                 '& .MuiInputLabel-root': { color: 'var(--muted-foreground)', fontFamily: 'inherit' },
-                                '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border)' },
+                                '& .MuiOutlinedInput-notchedOutline': { borderColor: bankAccountError ? 'rgb(239 68 68)' : 'var(--border)' },
                                 '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--ring)' }
                             }}
                         />

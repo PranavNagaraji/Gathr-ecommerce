@@ -24,6 +24,7 @@ export default function CreateCarrier() {
     bankAccount: '',
     profilePic: null,
   });
+  const [bankAccountError, setBankAccountError] = useState('');
   const [preview, setPreview] = useState(null);
   const recaptchaRef = useRef(null);
   const [confirmationResult, setConfirmationResult] = useState(null);
@@ -128,6 +129,13 @@ export default function CreateCarrier() {
     e.preventDefault();
     if (!form.isVerified) return alert('Please verify your phone number first!');
 
+    // Validate bank account
+    if (!/^\d{9,18}$/.test(form.bankAccount.trim())) {
+      setBankAccountError('Bank account number must be 9–18 digits.');
+      return;
+    }
+    setBankAccountError('');
+
     let imageData = null;
     if (form.profilePic) {
       if (typeof form.profilePic === 'string' && form.profilePic.startsWith('http')) {
@@ -217,7 +225,24 @@ export default function CreateCarrier() {
           <form onSubmit={handleSubmit} className="flex flex-col gap-5">
             <TextField label="License Number" value={form.licenseNumber} name="licenseNumber" onChange={handleChange} fullWidth variant="outlined" sx={textFieldSx} required />
             <TextField label="Aadhar Number" value={form.aadharNumber} name="aadharNumber" onChange={handleChange} fullWidth variant="outlined" sx={textFieldSx} required />
-            <TextField label="Bank Account (optional)" value={form.bankAccount} name="bankAccount" onChange={handleChange} fullWidth variant="outlined" sx={textFieldSx} />
+            <div>
+              <TextField
+                label="Bank Account Number *"
+                value={form.bankAccount}
+                name="bankAccount"
+                onChange={(e) => {
+                  handleChange(e);
+                  if (bankAccountError) setBankAccountError('');
+                }}
+                fullWidth
+                variant="outlined"
+                sx={textFieldSx}
+                required
+                inputProps={{ inputMode: 'numeric' }}
+                error={!!bankAccountError}
+                helperText={bankAccountError || 'Required: 9–18 digits'}
+              />
+            </div>
 
             <Box>
               <Button variant="contained" component="label" fullWidth sx={{ ...buttonSx, bgcolor: 'var(--muted)', color: 'var(--muted-foreground)', '&:hover': { bgcolor: 'var(--accent)', color: 'var(--accent-foreground)', margin: '0.5rem' } }}>
