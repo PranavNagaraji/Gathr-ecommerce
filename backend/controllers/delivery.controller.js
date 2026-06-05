@@ -535,7 +535,7 @@ export const getAllOrders = async (req,res)=>{
         Addresses(*),
         Shops(*)
       `).eq('carrier_id', user.id);
-      console.log(acceptedOrders);
+      // console.log(acceptedOrders);
         if (error) {
             return res.status(403).json({ error });
         }

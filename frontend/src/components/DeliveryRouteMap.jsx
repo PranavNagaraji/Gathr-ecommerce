@@ -135,7 +135,10 @@ export default function DeliveryRouteMap({
     try {
       const token = await getToken();
       console.log(email);
-      const res = await axios.post(`${API_URL}/api/otp`, { email }, {
+      const res = await axios.post(`${API_URL}/api/otp`, {
+        email,
+        orderId: selectedOrder?.id,
+      }, {
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -418,7 +421,11 @@ export default function DeliveryRouteMap({
                     </p>
                   ) : (
                     <button
-                      onClick={() => sendOtp(selectedOrder?.Users?.email)}
+                      onClick={() => {
+                        setOtpSent(false);
+                        setOtp('');
+                        sendOtp(selectedOrder?.Users?.email);
+                      }}
                       className="text-xs text-[var(--primary)] hover:underline font-semibold"
                     >
                       Resend OTP
