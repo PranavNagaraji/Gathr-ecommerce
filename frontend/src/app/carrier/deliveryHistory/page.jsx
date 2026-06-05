@@ -75,7 +75,28 @@ export default function Dashboard() {
                       <h2 className="text-base font-semibold">Order #{formatOrderId(order.id)}</h2>
                       <p className="text-xs text-[var(--muted-foreground)] mt-0.5">₹{order.amount_paid}</p>
                     </div>
-                    <span className="text-xs px-2 py-1 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">Completed</span>
+                  {(() => {
+                    const orderStatus = (order.status || '').replace(/'/g, '').toLowerCase();
+                    let statusText = order.status || 'Pending';
+                    let badgeClass = 'bg-neutral-100 text-neutral-800 dark:bg-neutral-900/30 dark:text-neutral-300';
+
+                    if (orderStatus === 'delivered') {
+                      statusText = 'Delivered';
+                      badgeClass = 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-300';
+                    } else if (orderStatus === 'ontheway') {
+                      statusText = 'On The Way';
+                      badgeClass = 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+                    } else if (orderStatus === 'accepted') {
+                      statusText = 'Accepted';
+                      badgeClass = 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+                    }
+
+                    return (
+                      <span className={`text-xs px-2.5 py-0.5 rounded-full font-semibold capitalize ${badgeClass}`}>
+                        {statusText}
+                      </span>
+                    );
+                  })()}
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

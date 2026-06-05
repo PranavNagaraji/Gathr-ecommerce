@@ -323,7 +323,7 @@ export default function Navbar() {
         className="sticky top-0 z-[1000] w-full bg-card text-[var(--foreground)] shadow-[0_6px_20px_rgba(0,0,0,0.1)] backdrop-blur supports-[backdrop-filter]:bg-card/85"
         style={{ fontFamily: "'Inter', sans-serif" }}
       >
-        <div className="max-w-7xl mx-auto flex items-center justify-between px-6 py-3 relative">
+        <div className="w-full flex items-center justify-between px-6 md:px-12 py-3 relative">
 
           {/* LOGO */}
           <MotionLink
