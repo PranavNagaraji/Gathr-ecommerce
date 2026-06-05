@@ -129,7 +129,15 @@ export const getOnTheWay = async (req, res) => {
         } catch {}
         const { data: onethewayOrders, error } = await supabase
             .from("Orders")
-            .select("*, Shops(*), Addresses(*) , Users:customer_id(*)").eq('carrier_id', user.id).eq('status', 'ontheway');
+            .select(`
+                *,
+                Shops(*),
+                Addresses(*),
+                Users:customer_id(*),
+                Cart(*, Cart_items(*, Items(*)))
+            `)
+            .eq('carrier_id', user.id)
+            .eq('status', 'ontheway');
         if (error) {
             return res.status(403).json({ error });
         }
