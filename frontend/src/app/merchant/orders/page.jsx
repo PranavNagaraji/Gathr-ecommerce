@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useUser, useAuth } from "@clerk/nextjs";
 import axios from "axios";
+import { toast } from "react-hot-toast";
 import { ChevronDown, ChevronUp } from "lucide-react";  
 
 export default function Orders() {
@@ -55,7 +56,7 @@ export default function Orders() {
             }
         )
         console.log(res.data);
-        alert("Order accepted successfully!");
+        toast.success("Order accepted successfully!");
         setOrders((prevOrders) => prevOrders.filter((order) => order.id !== orderId));
     } catch (error) {
         console.error("Error accepting order:", error);

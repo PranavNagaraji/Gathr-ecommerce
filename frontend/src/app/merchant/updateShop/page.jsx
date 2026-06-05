@@ -6,6 +6,7 @@ import { DownOutlined } from "@ant-design/icons";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import { toast } from "react-hot-toast";
 import { useTheme } from "@/components/theme/ThemeProvider";
 import AddressMapPicker from "@/components/shared/AddressMapPicker";
 
@@ -168,11 +169,11 @@ const UpdateShop = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (result.status === 200) {
-        alert("Shop updated successfully!");
+        toast.success("Shop updated successfully!");
         router.push("/merchant/dashboard");
       }
     } catch {
-      alert("Error updating shop");
+      toast.error("Error updating shop");
     }
   };
 
