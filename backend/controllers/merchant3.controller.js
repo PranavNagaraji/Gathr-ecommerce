@@ -4,6 +4,44 @@ import dotenv from "dotenv";
 
 dotenv.config();
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
+const calculateOrderTotalForShop = (order, shop) => {
+    if (!order.Cart || !order.Cart.Cart_items) return 0;
+    
+    const shopItems = order.Cart.Cart_items.filter(item => 
+        item.order_id === order.id && item.Items?.shop_id === shop.id
+    );
+    
+    const subtotal = shopItems.reduce((sum, item) => sum + (item.Items?.price || 0) * item.quantity, 0);
+    const gst = subtotal * 0.18;
+    
+    // Calculate distance and delivery fee
+    let deliveryFee = 0;
+    if (shop.Location && order.Addresses?.location) {
+        const toRad = (v) => (v * Math.PI) / 180;
+        const getDistanceKm = (lat1, lon1, lat2, lon2) => {
+            const R = 6371;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        };
+        
+        const shopLat = shop.Location.latitude ?? shop.Location.lat;
+        const shopLong = shop.Location.longitude ?? shop.Location.long;
+        const destLat = order.Addresses.location.lat ?? order.Addresses.location.latitude;
+        const destLong = order.Addresses.location.long ?? order.Addresses.location.longitude;
+        
+        if (shopLat != null && shopLong != null && destLat != null && destLong != null) {
+            const distanceKm = getDistanceKm(Number(shopLat), Number(shopLong), Number(destLat), Number(destLong));
+            const extraKm = Math.max(0, distanceKm - 2);
+            deliveryFee = 30 + Math.ceil(extraKm) * 10;
+        }
+    }
+    
+    return subtotal + gst + deliveryFee;
+};
+
 export const getPendingCarts = async (req, res) => {
     try {
         const { clerkId } = req.params; 
@@ -38,7 +76,24 @@ export const getPendingCarts = async (req, res) => {
         if (error) {
             return res.status(500).json({ message: "Failed to fetch carts.", error: error.message });
         }
-        return res.status(200).json({ carts });
+
+        // Filter and map order details
+        const processedCarts = (carts || []).map(order => {
+            console.log(`[DEBUG] getPendingCarts - Order ID: ${order.id}, Cart ID: ${order.cart_id}`);
+            
+            if (order.Cart && order.Cart.Cart_items) {
+                // Filter cart items by order_id and shop_id
+                order.Cart.Cart_items = order.Cart.Cart_items.filter(item => 
+                    item.order_id === order.id && item.Items?.shop_id === shop.id
+                );
+                
+                // Recalculate amount_paid for this merchant's shop items
+                order.amount_paid = calculateOrderTotalForShop(order, shop);
+            }
+            return order;
+        });
+
+        return res.status(200).json({ carts: processedCarts });
     } catch (err) {
         return res.status(500).json({ message: "Internal server error", error: err.message });
     }
@@ -128,7 +183,24 @@ export const get_all_carts = async (req,res)=>{
     if (error) {
         return res.status(500).json({ message: "Failed to fetch carts.", error: error.message });
     }
-    return res.status(200).json({ carts, total: count || 0, page, limit });
+
+    // Filter and map order details
+    const processedCarts = (carts || []).map(order => {
+        // console.log(`[DEBUG] getAllCarts - Order ID: ${order.id}, Cart ID: ${order.cart_id}`);
+        
+        if (order.Cart && order.Cart.Cart_items) {
+            // Filter cart items by order_id and shop_id
+            order.Cart.Cart_items = order.Cart.Cart_items.filter(item => 
+                item.order_id === order.id && item.Items?.shop_id === shop.id
+            );
+            
+            // Recalculate amount_paid for this merchant's shop items
+            order.amount_paid = calculateOrderTotalForShop(order, shop);
+        }
+        return order;
+    });
+
+    return res.status(200).json({ carts: processedCarts, total: count || 0, page, limit });
         
 }
 

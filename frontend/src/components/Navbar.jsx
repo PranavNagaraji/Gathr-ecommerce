@@ -18,8 +18,8 @@ const MotionLink = motion.create(Link);
 const merchantLinks = [
   { name: "Dashboard", href: "/merchant/dashboard" },
   { name: "Inventory", href: "/merchant/inventory" },
-  { name: "New Orders", href: "/merchant/orders" },
-  { name: "All Orders", href: "/merchant/allOrders" }
+  { name: "Orders", href: "/merchant/allOrders" },
+  { name: "Contact Us", href: "/merchant/contact" }
 ];
 
 const customerLinks = [

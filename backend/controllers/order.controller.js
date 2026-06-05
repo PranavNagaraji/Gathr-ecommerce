@@ -39,7 +39,8 @@ export const getCheckoutDetails = async (req, res) => {
     const { data: cartItems, error: cartItemError } = await supabase
       .from("Cart_items")
       .select("quantity, Items(*)")
-      .eq("cart_id", cart.id);
+      .eq("cart_id", cart.id)
+      .is("order_id", null);
 
     if (cartItemError || !cartItems?.length) {
       return res.status(404).json({ message: "Cart Items not found" });
@@ -65,7 +66,7 @@ export const getCheckoutDetails = async (req, res) => {
 // Compute GST and delivery fee based on distance between shop and a selected address (no schema change)
 export const getPriceBreakdown = async (req, res) => {
   try {
-    const { clerkId, addressId } = req.body || {};
+    const { clerkId, addressId, cartId, cart_id } = req.body || {};
     if (!clerkId || !addressId) {
       return res.status(400).json({ message: "Missing clerkId or addressId" });
     }
@@ -83,23 +84,37 @@ export const getPriceBreakdown = async (req, res) => {
       return res.status(403).json({ message: "Unauthorized: Only customers can get price breakdown" });
     }
 
-    // Get active cart
-    const { data: cart, error: cartError } = await supabase
-      .from('Cart')
-      .select('*')
-      .eq('user_id', user.id)
-      .eq('status', 'active')
-      .maybeSingle();
-
-    if (cartError || !cart) {
-      return res.status(404).json({ message: 'Cart not found' });
+    const targetCartId = cartId || cart_id;
+    let cart;
+    if (targetCartId) {
+      const { data: cartData, error: cartError } = await supabase
+        .from('Cart')
+        .select('*')
+        .eq('id', targetCartId)
+        .single();
+      if (cartError || !cartData) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+      cart = cartData;
+    } else {
+      const { data: cartData, error: cartError } = await supabase
+        .from('Cart')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (cartError || !cartData) {
+        return res.status(404).json({ message: 'Cart not found' });
+      }
+      cart = cartData;
     }
 
     // Get cart items with item details
     const { data: cartItems, error: itemsError } = await supabase
       .from('Cart_items')
       .select('quantity, Items(*)')
-      .eq('cart_id', cart.id);
+      .eq('cart_id', cart.id)
+      .is('order_id', null);
 
     if (itemsError || !cartItems?.length) {
       return res.status(404).json({ message: 'Cart items not found' });
@@ -200,7 +215,8 @@ export const placeOrder = async (req, res) => {
   const { data: cartItems, error: cartItemsError0 } = await supabase
     .from("Cart_items")
     .select("quantity, Items(*)")
-    .eq("cart_id", cart_id);
+    .eq("cart_id", cart_id)
+    .is("order_id", null);
   if (cartItemsError0 || !cartItems?.length) {
     return res.status(404).json({ message: "Cart Items not found" });
   }
@@ -268,7 +284,7 @@ export const placeOrder = async (req, res) => {
     return res.status(500).json({ message: "Failed to create order", error: orderError });
   }
 
-  console.log("Order created:", orderData);
+  // console.log("Order created:", orderData);
 
   // Associate active cart items with this order
   await supabase
@@ -279,7 +295,8 @@ export const placeOrder = async (req, res) => {
   const { data: cartItemsUpdate, error: cartItemsError } = await supabase
     .from("Cart_items")
     .select("quantity, item_id")
-    .eq("cart_id", cart_id);
+    .eq("cart_id", cart_id)
+    .eq("order_id", orderData[0].id);
   if (cartItemsError) {
     return res.status(500).json({ message: "Failed to fetch cart items" });
   }

@@ -513,15 +513,15 @@ export default function Dashboard() {
 
                 {/* Bento Grid */}
                 <motion.div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 auto-rows-fr gap-4" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
-                    {/* New Orders tile */}
+                    {/* Orders tile */}
                     <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col justify-between lg:col-span-1">
                         <div className="flex items-center justify-between">
-                            <h3 className="text-base font-semibold">New Orders</h3>
-                            {pendingCount > 0 && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[color-mix(in_oklab,var(--success),white_85%)] text-[var(--success)]">{pendingCount} new</span>}
+                            <h3 className="text-base font-semibold">Orders</h3>
+                            {pendingCount > 0 && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[color-mix(in_oklab,var(--success),white_85%)] text-[var(--success)]">{pendingCount} pending</span>}
                         </div>
                         <div className="mt-2 text-4xl font-extrabold tracking-tight">{pendingCount}</div>
                         <div className="mt-3">
-                            <AnimatedButton as="a" href="/merchant/orders" size="md" rounded="lg" variant="white">Review orders</AnimatedButton>
+                            <AnimatedButton as="a" href="/merchant/allOrders" size="md" rounded="lg" variant="white">Review Orders</AnimatedButton>
                         </div>
                     </motion.div>
 

@@ -95,7 +95,8 @@ async function createOrderFromCartHandler(req, res) {
     const { data: cartItems, error: itemsError } = await supabase
       .from("Cart_items")
       .select("*, Items(*)")
-      .eq("cart_id", cart.id);
+      .eq("cart_id", cart.id)
+      .is("order_id", null);
 
     if (itemsError || !cartItems || cartItems.length === 0) {
       return res.status(400).json({ error: "Cart is empty or failed to load" });
@@ -181,7 +182,8 @@ async function createOrderFromCartHandler(req, res) {
     await supabase
       .from("Cart_items")
       .update({ order_id: order.id })
-      .eq("cart_id", cart.id);
+      .eq("cart_id", cart.id)
+      .is("order_id", null);
 
     await supabase
       .from("Cart")

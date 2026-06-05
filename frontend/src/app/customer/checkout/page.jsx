@@ -18,6 +18,41 @@ const containerStyle = {
   height: "150px",
 };
 
+const CartItemsSummary = ({ cartItems, totalPrice }) => {
+  if (!cartItems || cartItems.length === 0) return null;
+  return (
+    <div className="bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl p-6">
+      <h3 className="text-lg font-semibold mb-4 border-b border-[var(--border)] pb-2 flex items-center gap-2">
+        🛒 Cart Items
+      </h3>
+      <div className="divide-y divide-[var(--border)]/60 max-h-80 overflow-y-auto pr-1">
+        {cartItems.map((item, idx) => {
+          const price = item.Items?.price || 0;
+          const qty = item.quantity || 0;
+          const lineTotal = price * qty;
+          return (
+            <div key={idx} className="py-3 flex items-center justify-between text-sm gap-4">
+              <div className="min-w-0 flex-1">
+                <p className="font-medium truncate text-[var(--foreground)]">{item.Items?.name}</p>
+                <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
+                  ₹{price.toLocaleString('en-IN')} × {qty}
+                </p>
+              </div>
+              <span className="font-semibold flex-shrink-0 text-[var(--foreground)]">
+                ₹{lineTotal.toLocaleString('en-IN')}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="mt-4 pt-3 border-t border-[var(--border)] flex justify-between items-center font-bold">
+        <span className="text-sm">Items Total</span>
+        <span className="text-base text-[var(--primary)]">₹{totalPrice.toLocaleString('en-IN')}</span>
+      </div>
+    </div>
+  );
+};
+
 const Checkout = () => {
 
   const leafletMapRef = useRef(null);
@@ -103,6 +138,8 @@ const Checkout = () => {
             const res = await axios.get(`${API_URL}/api/order/getCheckout/${user.id}`,{
                 headers: { Authorization: `Bearer ${token}` },
             });
+            const resolvedCartId = res.data?.cart_id || res.data?.cartId;
+            console.log("[DEBUG] Resolved Cart ID at top of checkout fetch:", resolvedCartId);
             console.log("Checkout details:", res.data);
             console.log(res.data);
 
@@ -120,11 +157,13 @@ const Checkout = () => {
   useEffect(() => {
     const fetchBreakdown = async () => {
       if (!isLoaded || !isSignedIn || !user || !selectedAddressId) return;
+      const cId = checkOutDetails?.cart_id || checkOutDetails?.cartId;
+      if (!cId) return;
       try {
         const token = await getToken();
         const res = await axios.post(
           `${API_URL}/api/order/price-breakdown`,
-          { clerkId: user.id, addressId: selectedAddressId },
+          { clerkId: user.id, addressId: selectedAddressId, cartId: cId },
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setPriceBreakdown(res.data);
@@ -134,7 +173,7 @@ const Checkout = () => {
       }
     };
     fetchBreakdown();
-  }, [selectedAddressId, isLoaded, isSignedIn, user]);
+  }, [selectedAddressId, isLoaded, isSignedIn, user, checkOutDetails]);
 
   useEffect(() => {
     const shopId = checkOutDetails?.shop_id || checkOutDetails?.shopId;
@@ -469,11 +508,29 @@ const Checkout = () => {
 
   return (
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] px-6 sm:px-10 lg:px-20 py-12">
-      <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight mb-6">Checkout</h1>
+      <h1 className="text-3xl sm:text-4xl font-extrabold tracking-tight">Checkout</h1>
+      {shopDetails ? (
+        <p className="text-sm text-[var(--muted-foreground)] mt-2 mb-6 flex items-center gap-1.5 flex-wrap">
+          <span>Ordering from</span>
+          <span className="font-semibold text-[var(--foreground)]">{shopDetails.shop_name}</span>
+          <span className="text-[var(--border)]">|</span>
+          <span className="truncate">{shopDetails.address}</span>
+        </p>
+      ) : (
+        <div className="h-6" />
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left: Address + Payment */}
         <div className="lg:col-span-2 space-y-8">
+          {/* Mobile Cart Items Summary */}
+          <div className="block lg:hidden mb-6">
+            <CartItemsSummary 
+              cartItems={checkOutDetails?.cartItems || []} 
+              totalPrice={priceBreakdown?.subtotal ?? checkOutDetails?.totalPrice ?? 0} 
+            />
+          </div>
+
           <div className="bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl p-6">
             <h2 className="text-xl font-semibold mb-4">Select a Shipping Address</h2>
 
@@ -688,8 +745,8 @@ const Checkout = () => {
         </div>
 
         {/* Right: Order Summary */}
-        <div className="lg:col-span-1">
-          <div className="bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl p-6 sticky top-24">
+        <div className="lg:col-span-1 lg:sticky lg:top-24 lg:self-start space-y-6">
+          <div className="bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl p-6">
             <h3 className="text-lg font-semibold mb-4">Order Summary</h3>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span>Items</span><span>{checkOutDetails?.cartItems?.length ?? 0}</span></div>
@@ -731,6 +788,14 @@ const Checkout = () => {
               {priceBreakdown && priceBreakdown.distanceKm > 18.0 ? "Undeliverable" : "Checkout"}
             </AnimatedButton>
             </div>
+          </div>
+
+          {/* Desktop Cart Items Summary */}
+          <div className="hidden lg:block">
+            <CartItemsSummary 
+              cartItems={checkOutDetails?.cartItems || []} 
+              totalPrice={priceBreakdown?.subtotal ?? checkOutDetails?.totalPrice ?? 0} 
+            />
           </div>
         </div>
       </div>

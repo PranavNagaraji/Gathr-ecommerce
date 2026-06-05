@@ -28,7 +28,11 @@ const AllOrders = () => {
           `${API_URL}/api/merchant/get_all_carts/${user.id}?page=${page}&limit=${limit}`,
           { headers: { Authorization: `Bearer ${token}` } }
         );
-        setOrders(res.data.carts || []);
+        const carts = res.data.carts || [];
+        carts.forEach(order => {
+          console.log(`[DEBUG] All Order ID: ${order.id}, Cart ID: ${order.cart_id}`);
+        });
+        setOrders(carts);
         setTotal(res.data.total || 0);
       } catch (err) {
         console.error("Error fetching orders:", err);
@@ -84,7 +88,7 @@ const AllOrders = () => {
 
   return (
     <div className="max-w-5xl mx-auto p-6 space-y-4">
-      <h1 className="text-2xl font-semibold mb-4">All Orders</h1>
+      <h1 className="text-2xl font-semibold mb-4">Orders</h1>
 
       {orders.map((order) => (
         <div

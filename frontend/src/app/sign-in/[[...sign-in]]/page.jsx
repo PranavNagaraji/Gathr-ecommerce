@@ -193,9 +193,9 @@ export default function CustomSignInPage() {
                 {redirectingToSignUp && (
                   <p className="mt-1.5 text-red-300">
                     Redirecting to sign-up…{" "}
-                    <Link href="/sign-up" className="underline font-medium text-red-200 hover:text-white">
+                    <a href="/sign-up" className="underline font-medium text-red-200 hover:text-white">
                       Go now
-                    </Link>
+                    </a>
                   </p>
                 )}
               </div>
@@ -212,12 +212,12 @@ export default function CustomSignInPage() {
 
           <p className="text-sm text-gray-400 text-center mt-6">
             Don&apos;t have an account?{" "}
-            <Link
+            <a
               href="/sign-up"
               className="text-green-400 hover:underline font-medium"
             >
               Sign Up
-            </Link>
+            </a>
           </p>
         </div>
       </div>

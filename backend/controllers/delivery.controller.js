@@ -56,7 +56,7 @@ export const getDelivery = async (req, res) => {
             return R * c;
         };
         const radiusKm = 5;
-        const nearbyOrders = acceptedOrders.filter(order => {
+        const nearbyOrders = (acceptedOrders || []).filter(order => {
             const loc = order.Addresses?.location;
             if (!loc || loc.lat == null || loc.long == null) return false;
             const distance = getDistanceKm(lat, long, loc.lat, loc.long);
@@ -190,9 +190,71 @@ export const getCarrier = async (req, res) => {
 
 export const createCarrier = async (req,res) => {
     try {
-        const {carrierData, clerkId , profile} = req.body;
-        const {data,error} = await supabase.from('Users').update({'delivery_details':carrierData}).eq('clerk_id', clerkId);
+        const {carrierData, clerkId , profile, address, location} = req.body;
+
+        // 1. Get the database User ID
+        const { data: dbUser, error: userError } = await supabase
+            .from('Users')
+            .select('id')
+            .eq('clerk_id', clerkId)
+            .single();
+            
+        if (userError || !dbUser) {
+            return res.status(404).json({ message: "User not found" });
+        }
+
+        // 2. Update the carrier delivery details in Users table
+        const {data,error} = await supabase.from('Users').update({'delivery_details':carrierData}).eq('clerk_id', clerkId).select();
         if(error) return res.status(500).json({ message: "Error creating carrier", error });
+
+        // 3. Save/Upsert the address to the Addresses table
+        if (address && location) {
+            // Check if address already exists for this carrier
+            const { data: existingAddress } = await supabase
+                .from('Addresses')
+                .select('id')
+                .eq('user_id', dbUser.id)
+                .maybeSingle();
+
+            if (existingAddress) {
+                // Update
+                const { error: addressError } = await supabase
+                    .from('Addresses')
+                    .update({
+                        address,
+                        mobile_no: carrierData.phone,
+                        location: {
+                            lat: Number(location.latitude),
+                            long: Number(location.longitude)
+                        }
+                    })
+                    .eq('id', existingAddress.id);
+                if (addressError) {
+                    console.error("Error updating carrier address:", addressError);
+                    return res.status(500).json({ message: "Error updating address", error: addressError });
+                }
+            } else {
+                // Insert
+                const { error: addressError } = await supabase
+                    .from('Addresses')
+                    .insert({
+                        user_id: dbUser.id,
+                        address,
+                        title: 'Carrier Address',
+                        description: '',
+                        mobile_no: carrierData.phone,
+                        location: {
+                            lat: Number(location.latitude),
+                            long: Number(location.longitude)
+                        }
+                    });
+                if (addressError) {
+                    console.error("Error inserting carrier address:", addressError);
+                    return res.status(500).json({ message: "Error inserting address", error: addressError });
+                }
+            }
+        }
+
         res.status(200).json(data);
 
         if(profile)
@@ -201,6 +263,7 @@ export const createCarrier = async (req,res) => {
         }
     } catch (error) {
         console.error("Error creating carrier:", error);
+        return res.status(500).json({ message: "Internal server error", error: error.message });
     }
 }
 

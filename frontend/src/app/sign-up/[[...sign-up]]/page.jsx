@@ -79,10 +79,17 @@ const Signup = () => {
   const handleOAuth = async (provider) => {
     setError("");
     try {
+      // Store the intended role in sessionStorage BEFORE the OAuth redirect.
+      // This acts as a fallback because Clerk sometimes strips query params from
+      // redirectUrlComplete when an existing account triggers a sign-in instead of sign-up.
+      if (typeof window !== "undefined") {
+        sessionStorage.setItem("intended_role", role);
+      }
       await signUp.authenticateWithRedirect({
         strategy: provider,
         redirectUrl: "/sso-callback",
         redirectUrlComplete: `/auth-callback?role=${role}`,
+        unsafeMetadata: { intended_role: role },
       });
     } catch (err) {
       console.error("OAuth error:", JSON.stringify(err, null, 2));

@@ -17,12 +17,27 @@ export default function AuthCallbackPage() {
   useEffect(() => {
     if (!isLoaded || !user) return;
 
-    const role = searchParams.get("role") || "customer";
+    // Resolve the intended role from multiple sources in priority order:
+    // 1. URL param  — reliable for email/password sign-up
+    // 2. unsafeMetadata — written to Clerk BEFORE the OAuth redirect (survives the handshake)
+    // 3. sessionStorage — local fallback stored just before the OAuth redirect
+    // 4. existing publicMetadata — already-assigned role (sign-in case)
+    const urlRole = searchParams.get("role");
+    const metaRole = user.unsafeMetadata?.intended_role;
+    const storageRole = (typeof window !== "undefined") ? sessionStorage.getItem("intended_role") : null;
+    const existingRole = user.publicMetadata?.role;
+
+    // Use URL param first; if missing (Clerk stripped it), fall back to unsafeMetadata / sessionStorage
+    const role = urlRole || metaRole || storageRole || existingRole || "customer";
+
+    // Clean up sessionStorage so it doesn't affect future sign-ins
+    if (typeof window !== "undefined") sessionStorage.removeItem("intended_role");
 
     const assignRoleAndRedirect = async () => {
       try {
-        // Only call set-role if the user has no role yet OR a role was explicitly passed
-        if (!user.publicMetadata?.role || searchParams.get("role")) {
+        // Only call set-role if the user has no role yet OR a non-customer role was explicitly passed
+        const shouldSetRole = !existingRole || (urlRole && urlRole !== existingRole) || (!urlRole && metaRole && metaRole !== existingRole) || (!urlRole && !metaRole && storageRole && storageRole !== existingRole);
+        if (shouldSetRole) {
           setStatusMsg("Setting up your account…");
           const token = await getToken();
           await axios.post(
@@ -38,12 +53,19 @@ export default function AuthCallbackPage() {
         }
 
         // Navigate AFTER the backend has finished writing to both Clerk + Supabase
+        // Use the effective role (newly set or existing) to pick the destination.
+        // window.location.href forces a full page reload so Clerk re-issues the JWT
+        // with the freshly-written publicMetadata — bypassing any stale token cache.
         setStatusMsg("Redirecting…");
-        router.push("/");
+        let dest = "/";
+        if (role === "carrier") dest = "/carrier/createCarrier";
+        else if (role === "merchant") dest = "/merchant/dashboard";
+        else if (role === "customer") dest = "/customer/dashboard";
+        window.location.href = dest;
       } catch (err) {
         console.error("Error in auth-callback:", err);
         // Still redirect even on error so the user isn't stuck
-        router.push("/");
+        window.location.href = "/";
       }
     };
 
