@@ -50,6 +50,27 @@ const Orders = () => {
     return s.length > 6 ? s.slice(-6).toUpperCase() : s.toUpperCase();
   };
 
+  const formatAddress = (addr) => {
+    if (!addr) return '-';
+    const title = addr.title?.trim();
+    // Use title if it's descriptive and not a generic "addressN" placeholder
+    if (title && !/^address\d*$/i.test(title)) {
+      return title;
+    }
+    if (addr.address) {
+      const parts = addr.address.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        // If the first part is a number or short code (like house/shop number), show first 2 parts
+        if (/^\d+$/.test(parts[0]) || parts[0].length <= 3) {
+          return parts.slice(0, 2).join(', ');
+        }
+        return parts[0];
+      }
+      return addr.address;
+    }
+    return '-';
+  };
+
   useEffect(() => {
     const getOrders = async () => {
       if (!isLoaded || !isSignedIn || !user) return;
@@ -152,18 +173,25 @@ const Orders = () => {
                     <h2 className="text-base font-semibold">Order #{formatOrderId(order.id)}</h2>
                     <p className="text-xs text-[var(--muted-foreground)] mt-0.5">{new Date(order.created_at).toLocaleString()}</p>
                   </div>
-                  <div className="flex flex-wrap gap-2 justify-end">
+                  <div className="flex flex-wrap gap-2 justify-end items-center">
                     <span className={`text-xs px-2 py-1 rounded-full ${getPaymentStyle(order.payment_status)} capitalize`}>
                       {order.payment_status}
+                    </span>
+                    <span className={`text-xs px-2 py-1 rounded-full ${getStatusStyle(order.status)} capitalize`}>
+                      {order.status?.replace(/'/g, '')}
                     </span>
                   </div>
                 </div>
                 <dl className="mt-3 space-y-1 text-sm">
                   <div className="flex justify-between"><dt className="text-[var(--muted-foreground)]">Amount Paid</dt><dd className="font-medium">₹{order.amount_paid}</dd></div>
                   <div className="flex justify-between"><dt className="text-[var(--muted-foreground)]">Method</dt><dd className="font-medium">{order.payment_method?.toUpperCase?.() || '-'}</dd></div>
-                  <div className="flex justify-between"><dt className="text-[var(--muted-foreground)]">Delivery</dt><dd className="font-medium capitalize">{order.status.replace(/'/g,'')}</dd></div>
-                  <div className="flex justify-between"><dt className="text-[var(--muted-foreground)]">Address ID</dt><dd className="font-medium">{order.address_id}</dd></div>
-                  <div className="flex justify-between"><dt className="text-[var(--muted-foreground)]">Shop</dt><dd className="truncate max-w-[60%] text-right font-medium">{order.Shops.shop_name}</dd></div>
+                  <div className="flex justify-between">
+                    <dt className="text-[var(--muted-foreground)]">Address</dt>
+                    <dd className="font-medium truncate max-w-[60%] text-right" title={order.Addresses?.address || '-'}>
+                      {formatAddress(order.Addresses)}
+                    </dd>
+                  </div>
+                  <div className="flex justify-between"><dt className="text-[var(--muted-foreground)]">Shop</dt><dd className="truncate max-w-[60%] text-right font-medium">{order.Shops?.shop_name || '-'}</dd></div>
                 </dl>
                 {order.Users ? (
                   <div className="mt-4 flex items-center gap-3">

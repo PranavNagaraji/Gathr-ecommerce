@@ -383,7 +383,7 @@ export const getcarthistory = async (req, res) => {
 
   const { data: carts, error: cartsError, count } = await supabase
     .from('Orders ')
-    .select('*, Shops(*), Users:carrier_id(*)', { count: 'exact' })
+    .select('*, Shops(*), Addresses(*), Users:carrier_id(*)', { count: 'exact' })
     .eq('customer_id', user.id)
     .order('created_at', { ascending: false })
     .range(from, to);
