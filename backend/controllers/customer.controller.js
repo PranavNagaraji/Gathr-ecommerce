@@ -565,27 +565,7 @@ export const addRating = async (req, res) => {
 };
 
 const createCart = async (userId) => {
-  // Check if a cart already exists for this user (any status)
-  const { data: existingCart, error: findError } = await supabase
-    .from("Cart")
-    .select("*")
-    .eq("user_id", userId)
-    .maybeSingle();
-
-  if (existingCart) {
-    // If it exists, update status to "active" and return it
-    const { data: updatedCart, error: updateError } = await supabase
-      .from("Cart")
-      .update({ status: "active" })
-      .eq("id", existingCart.id)
-      .select("*")
-      .single();
-    
-    if (updateError) return { message: "Failed to reactivate cart", error: updateError.message };
-    return updatedCart;
-  }
-
-  // If no cart exists at all, insert a new active cart
+  // Insert a brand new active cart to ensure each cart session is unique per order
   const { data: cart, error: cartError } = await supabase
     .from("Cart")
     .insert({ user_id: userId, status: "active" })
