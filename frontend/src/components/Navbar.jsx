@@ -32,7 +32,8 @@ const customerLinks = [
 
 const carrierLinks = [
   { name: "Dashboard", href: "/carrier/dashboard" },
-  { name: "Nearby Orders", href: "/carrier/assignedDeliveries" },
+  { name: "Nearby Orders", href: "/carrier/nearbyOrders" },
+  { name: "Assigned Deliveries", href: "/carrier/assignedDeliveries" },
   { name: "Delivery History", href: "/carrier/deliveryHistory" },
   { name: "Update Profile", href: "/carrier/updateProfile" },
 ];
@@ -142,6 +143,8 @@ export default function Navbar() {
         return t("nav.allOrders");
       case "Nearby Orders":
         return "Nearby Orders";
+      case "Assigned Deliveries":
+        return "Assigned Deliveries";
       case "Delivery History":
         return t("nav.deliveryHistory");
       case "Update Profile":
