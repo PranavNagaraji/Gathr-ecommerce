@@ -13,7 +13,7 @@ const CartItems = () => {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
   const [items, setItems] = useState([]);
-  const { cart_id } = useParams();
+  const { order_id } = useParams();
   const [loading, setLoading] = useState(true);
 
   // Live tracking state
@@ -48,11 +48,12 @@ const CartItems = () => {
 
   // Try to notify user by email (backend optional).
   const notifyAutoReorder = async (phase, payload = {}) => {
+    if (!order?.cart_id) return;
     try {
       const token = await getToken();
       await axios.post(
         `${API_URL}/api/notify/autoReorder`,
-        { clerkId: user?.id, cartId: cart_id, phase, ...payload },
+        { clerkId: user?.id, cartId: order.cart_id, phase, ...payload },
         { headers: { Authorization: `Bearer ${token}` } }
       );
     } catch {}
@@ -61,7 +62,7 @@ const CartItems = () => {
   // Pre-notification one hour before due
   const preNotifyKey = (uid, cid, at) => (uid && cid && at ? `autoReorder:prenotify:${uid}:${cid}:${at}` : null);
   useEffect(() => {
-    if (!scheduled) return;
+    if (!scheduled || !order?.cart_id) return;
     const dueTs = new Date(scheduled.nextAt).getTime();
     if (!Number.isFinite(dueTs)) return;
     const oneHour = 60 * 60 * 1000;
@@ -69,7 +70,7 @@ const CartItems = () => {
 
     // If within next hour and not yet notified, send pre-due email immediately
     if (dueTs > now && dueTs - now <= oneHour) {
-      const key = preNotifyKey(user?.id, cart_id, scheduled.nextAt);
+      const key = preNotifyKey(user?.id, order.cart_id, scheduled.nextAt);
       try {
         const seen = key && localStorage.getItem(key);
         if (!seen) {
@@ -84,7 +85,7 @@ const CartItems = () => {
     if (dueTs - now > oneHour) {
       const fireIn = (dueTs - now) - oneHour;
       tId = setTimeout(() => {
-        const key = preNotifyKey(user?.id, cart_id, scheduled.nextAt);
+        const key = preNotifyKey(user?.id, order.cart_id, scheduled.nextAt);
         try {
           const seen = key && localStorage.getItem(key);
           if (!seen) {
@@ -95,7 +96,7 @@ const CartItems = () => {
       }, fireIn);
     }
     return () => { if (tId) clearTimeout(tId); };
-  }, [scheduled?.nextAt, scheduled?.frequencyDays, user?.id, cart_id]);
+  }, [scheduled?.nextAt, scheduled?.frequencyDays, user?.id, order?.cart_id]);
 
   // Dynamically load Leaflet once on client
   useEffect(() => {
@@ -124,7 +125,7 @@ const CartItems = () => {
         const token = await getToken();
         const res = await axios.post(
           `${API_URL}/api/customer/getcartitems`,
-          { cartId: cart_id, clerkId: user.id },
+          { orderId: order_id, clerkId: user.id },
           { headers: { Authorization: `Bearer ${token}` } }
         );
         setItems(res.data.items || []);
@@ -135,16 +136,17 @@ const CartItems = () => {
       }
     };
     getOrders();
-  }, [user, isLoaded, isSignedIn, cart_id]);
+  }, [user, isLoaded, isSignedIn, order_id]);
 
   useEffect(() => {
-    const key = scheduleKey(user?.id, cart_id);
+    if (!order?.cart_id) return;
+    const key = scheduleKey(user?.id, order.cart_id);
     if (!key) return;
     try {
       const raw = localStorage.getItem(key);
       if (raw) setScheduled(JSON.parse(raw));
     } catch {}
-  }, [user?.id, cart_id]);
+  }, [user?.id, order?.cart_id]);
 
   // Fetch order (for status + carrier info)
   useEffect(() => {
@@ -154,7 +156,7 @@ const CartItems = () => {
         const token = await getToken();
         const res = await axios.post(
           `${API_URL}/api/customer/orders/getByCart`,
-          { cartId: cart_id, clerkId: user.id },
+          { orderId: order_id, clerkId: user.id },
           { headers: { Authorization: `Bearer ${token}` } }
         );
         const ord = res?.data?.order || null;
@@ -174,7 +176,7 @@ const CartItems = () => {
       } catch (_) {}
     };
     fetchOrder();
-  }, [isLoaded, isSignedIn, user, cart_id, getToken, API_URL]);
+  }, [isLoaded, isSignedIn, user, order_id, getToken, API_URL]);
 
   // Realtime via Socket.IO when ontheway
   useEffect(() => {
@@ -322,11 +324,11 @@ const CartItems = () => {
   };
 
   const reorderNow = async () => {
-    if (!isLoaded || !isSignedIn || !user) return;
+    if (!isLoaded || !isSignedIn || !user || !order?.cart_id) return;
     setReordering(true);
     try {
       const token = await getToken();
-      const itemsRes = await axios.post(`${API_URL}/api/customer/getcartitems`, { cartId: cart_id, clerkId: user.id }, { headers: { Authorization: `Bearer ${token}` } });
+      const itemsRes = await axios.post(`${API_URL}/api/customer/getcartitems`, { orderId: order_id, clerkId: user.id }, { headers: { Authorization: `Bearer ${token}` } });
       const prevItems = itemsRes?.data?.items || [];
       let status = await addItemsToCart(prevItems, token);
       if (status === 'DIFF_SHOP') {
@@ -344,7 +346,8 @@ const CartItems = () => {
   };
 
   const saveSchedule = () => {
-    const key = scheduleKey(user?.id, cart_id);
+    if (!order?.cart_id) return;
+    const key = scheduleKey(user?.id, order.cart_id);
     if (!key) return;
     const nextAt = new Date(Date.now() + scheduleDays * 24 * 60 * 60 * 1000).toISOString();
     const payload = { frequencyDays: scheduleDays, nextAt };
@@ -352,14 +355,15 @@ const CartItems = () => {
     notifyAutoReorder('scheduled', payload);
   };
   const cancelSchedule = () => {
-    const key = scheduleKey(user?.id, cart_id);
+    if (!order?.cart_id) return;
+    const key = scheduleKey(user?.id, order.cart_id);
     if (!key) return;
     try { localStorage.removeItem(key); setScheduled(null); alert('Auto-reorder cancelled'); } catch {}
   };
 
   // If a schedule is due, prompt to execute now and roll forward
   useEffect(() => {
-    if (!scheduled) return;
+    if (!scheduled || !order?.cart_id) return;
     try {
       const dueTs = new Date(scheduled.nextAt).getTime();
       if (!Number.isFinite(dueTs)) return;
@@ -370,7 +374,7 @@ const CartItems = () => {
         if (yes) {
           (async () => {
             await reorderNow();
-            const key = scheduleKey(user?.id, cart_id);
+            const key = scheduleKey(user?.id, order.cart_id);
             const freq = Number(scheduled.frequencyDays) || scheduleDays || 7;
             const nextAt = new Date(Date.now() + freq * 24 * 60 * 60 * 1000).toISOString();
             const payload = { frequencyDays: freq, nextAt };
@@ -379,7 +383,7 @@ const CartItems = () => {
         }
       }
     } catch {}
-  }, [scheduled?.nextAt, scheduled?.frequencyDays, user?.id, cart_id]);
+  }, [scheduled?.nextAt, scheduled?.frequencyDays, user?.id, order?.cart_id]);
 
   if (loading) return <div className="text-center mt-10 text-[var(--muted-foreground)]">Loading items...</div>;
 
@@ -479,7 +483,7 @@ const CartItems = () => {
       )}
       <header className="mb-6 text-center">
         <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">Order Details</h1>
-        <p className="text-sm text-[var(--muted-foreground)] mt-2">Items for cart #{cart_id}</p>
+        <p className="text-sm text-[var(--muted-foreground)] mt-2">Items for Order #{order ? String(order.id).slice(-6).toUpperCase() : ''}</p>
       </header>
 
       {/* Bill summary */}
@@ -530,6 +534,6 @@ const CartItems = () => {
       </motion.section>
     </div>
   );
-};
+}
 
 export default CartItems;

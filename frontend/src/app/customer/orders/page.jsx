@@ -146,7 +146,7 @@ const Orders = () => {
               transition={{ duration: 0.22, ease: "easeOut" }}
               className="group rounded-2xl border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-sm hover:shadow-md transition-all hover:-translate-y-0.5"
             >
-              <Link href={`/customer/orders/${order.cart_id}`} className="block p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-2xl">
+              <Link href={`/customer/orders/${order.id}`} className="block p-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] rounded-2xl">
                 <div className="flex items-start justify-between gap-3">
                   <div>
                     <h2 className="text-base font-semibold">Order #{formatOrderId(order.id)}</h2>

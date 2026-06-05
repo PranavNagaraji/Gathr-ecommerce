@@ -396,7 +396,7 @@ export const getcarthistory = async (req, res) => {
 }
 
 export const getcartitems = async (req, res) => {
-  const { clerkId, cartId } = req.body;
+  const { clerkId, cartId, orderId } = req.body;
 
   const { data: user, error: userError } = await supabase
     .from('Users')
@@ -412,7 +412,14 @@ export const getcartitems = async (req, res) => {
     return res.status(403).json({ message: "Unauthorized: Only logged in users can get cart history" });
   }
 
-  const { data: items, error: itemsError } = await supabase.from('Cart_items').select('*, Items(*)').eq('cart_id', cartId);
+  let query = supabase.from('Cart_items').select('*, Items(*)');
+  if (orderId) {
+    query = query.eq('order_id', orderId);
+  } else {
+    query = query.eq('cart_id', cartId);
+  }
+
+  const { data: items, error: itemsError } = await query;
 
   if (itemsError || !items) {
     return res.status(404).json({ message: "Cart history not found" });
@@ -423,8 +430,9 @@ export const getcartitems = async (req, res) => {
 
 export const getOrderByCart = async (req, res) => {
   try {
-    const { clerkId, cartId } = req.body || {};
-    if (!clerkId || !cartId) return res.status(400).json({ message: 'Missing clerkId or cartId' });
+    const { clerkId, cartId, orderId } = req.body || {};
+    if (!clerkId) return res.status(400).json({ message: 'Missing clerkId' });
+    if (!cartId && !orderId) return res.status(400).json({ message: 'Missing cartId or orderId' });
 
     const { data: user, error: userError } = await supabase
       .from('Users')
@@ -434,12 +442,18 @@ export const getOrderByCart = async (req, res) => {
     if (userError || !user) return res.status(404).json({ message: 'User not found' });
     if (user.role !== 'customer') return res.status(403).json({ message: 'Unauthorized' });
 
-    const { data: order, error } = await supabase
+    let query = supabase
       .from('Orders')
       .select('*, Shops(*), Addresses(*), Users:carrier_id(*)')
-      .eq('customer_id', user.id)
-      .eq('cart_id', cartId)
-      .maybeSingle();
+      .eq('customer_id', user.id);
+
+    if (orderId) {
+      query = query.eq('id', orderId);
+    } else {
+      query = query.eq('cart_id', cartId);
+    }
+
+    const { data: order, error } = await query.maybeSingle();
     if (error) return res.status(500).json({ message: 'Failed to fetch order', error });
     if (!order) return res.status(404).json({ message: 'Order not found' });
 
