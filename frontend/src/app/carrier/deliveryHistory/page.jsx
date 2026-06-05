@@ -19,6 +19,21 @@ export default function Dashboard() {
     return s.length > 6 ? s.slice(-6).toUpperCase() : s.toUpperCase();
   };
 
+  const getShortAddress = (addr) => {
+    if (!addr) return '-';
+    if (addr.address) {
+      const parts = addr.address.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        if (/^\d+$/.test(parts[0]) || parts[0].length <= 3) {
+          return parts.slice(0, 2).join(', ');
+        }
+        return parts[0];
+      }
+      return addr.address;
+    }
+    return '-';
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
 
@@ -107,7 +122,7 @@ export default function Dashboard() {
                     </div>
                     <div className="space-y-1">
                       <h3 className="font-semibold text-sm">Delivery</h3>
-                      <p className="text-sm">{order.Addresses.title}</p>
+                      <p className="text-sm">{getShortAddress(order.Addresses)}</p>
                       <p className="text-xs text-[var(--muted-foreground)]">{order.Addresses.address}</p>
                     </div>
                   </div>

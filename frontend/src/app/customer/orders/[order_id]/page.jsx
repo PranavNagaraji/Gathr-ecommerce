@@ -32,6 +32,31 @@ const CartItems = () => {
   const [etaInfo, setEtaInfo] = useState(null);
   const getChatKey = (oid) => (oid ? `chat_${oid}` : null);
 
+  const UserAvatar = ({ userObject, sizeClass = "w-12 h-12 text-sm" }) => {
+    const url = userObject?.delivery_details?.profile?.url || userObject?.profile_image || userObject?.imageUrl;
+    if (url && url !== '/avatar.svg') {
+      return (
+        <img
+          src={url}
+          alt="Profile"
+          className={`${sizeClass} rounded-full object-cover border border-[var(--border)]`}
+        />
+      );
+    }
+    const first = userObject?.first_name || userObject?.firstName || '';
+    const last = userObject?.last_name || userObject?.lastName || '';
+    let initials = (first.charAt(0) + last.charAt(0)).toUpperCase();
+    if (!initials) {
+      const name = userObject?.fullName || userObject?.full_name || userObject?.username || '?';
+      initials = name.charAt(0).toUpperCase();
+    }
+    return (
+      <div className={`${sizeClass} rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center font-bold uppercase border border-[var(--border)]`}>
+        {initials}
+      </div>
+    );
+  };
+
   const [reordering, setReordering] = useState(false);
   const [scheduleDays, setScheduleDays] = useState(7);
   const scheduleKey = (uid, cid) => (uid && cid ? `autoReorder:${uid}:${cid}` : null);
@@ -425,11 +450,7 @@ const CartItems = () => {
                 <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div className="flex items-center gap-3">
-                      <img 
-                        src={order.Users?.delivery_details?.profile?.url || '/avatar.svg'} 
-                        alt="Delivery partner" 
-                        className="w-12 h-12 rounded-full object-cover border border-[var(--border)]" 
-                      />
+                      <UserAvatar userObject={order.Users} sizeClass="w-12 h-12 text-sm" />
                       <div>
                         <span className="text-xs text-[var(--muted-foreground)] block">Delivery Partner</span>
                         <span className="text-sm font-bold">
@@ -512,11 +533,7 @@ const CartItems = () => {
               {String(order.status || '').toLowerCase() === 'delivered' && (
                 <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
                   <div className="flex items-center gap-4">
-                    <img 
-                      src={order.Users?.delivery_details?.profile?.url || '/avatar.svg'} 
-                      alt="Delivery partner" 
-                      className="w-16 h-16 rounded-full object-cover border border-[var(--border)]" 
-                    />
+                    <UserAvatar userObject={order.Users} sizeClass="w-16 h-16 text-sm" />
                     <div>
                       <h3 className="text-lg font-bold">Delivered Successfully!</h3>
                       <p className="text-sm text-[var(--muted-foreground)] mt-0.5">

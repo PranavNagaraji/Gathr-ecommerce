@@ -17,6 +17,21 @@ const AllOrders = () => {
   const [limit] = useState(8);
   const [total, setTotal] = useState(0);
 
+  const getShortAddress = (addr) => {
+    if (!addr) return '-';
+    if (addr.address) {
+      const parts = addr.address.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        if (/^\d+$/.test(parts[0]) || parts[0].length <= 3) {
+          return parts.slice(0, 2).join(', ');
+        }
+        return parts[0];
+      }
+      return addr.address;
+    }
+    return '-';
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
 
@@ -193,7 +208,7 @@ const AllOrders = () => {
                 {order.Addresses ? (
                   <div className="rounded-lg p-3 text-sm bg-[var(--muted)]/30 text-[var(--card-foreground)] border border-[var(--border)]">
                     <p>
-                      <span className="font-medium">{order.Addresses.title}</span>
+                      <span className="font-medium">{getShortAddress(order.Addresses)}</span>
                     </p>
                     <p>{order.Addresses.address}</p>
                     {order.Addresses.mobile_no && (

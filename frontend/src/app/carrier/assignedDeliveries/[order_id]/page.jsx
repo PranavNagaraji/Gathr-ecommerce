@@ -23,6 +23,46 @@ export default function AssignedDeliveryDetail() {
   const [messages, setMessages] = useState([]);
   const getChatKey = (oid) => (oid ? `chat_${oid}` : null);
 
+  const getShortAddress = (addr) => {
+    if (!addr) return '-';
+    if (addr.address) {
+      const parts = addr.address.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        if (/^\d+$/.test(parts[0]) || parts[0].length <= 3) {
+          return parts.slice(0, 2).join(', ');
+        }
+        return parts[0];
+      }
+      return addr.address;
+    }
+    return '-';
+  };
+
+  const UserAvatar = ({ userObject, sizeClass = "w-10 h-10 text-sm" }) => {
+    const url = userObject?.delivery_details?.profile?.url || userObject?.profile_image || userObject?.imageUrl;
+    if (url && url !== '/avatar.svg') {
+      return (
+        <img
+          src={url}
+          alt="Profile"
+          className={`${sizeClass} rounded-full object-cover border border-[var(--border)]`}
+        />
+      );
+    }
+    const first = userObject?.first_name || userObject?.firstName || '';
+    const last = userObject?.last_name || userObject?.lastName || '';
+    let initials = (first.charAt(0) + last.charAt(0)).toUpperCase();
+    if (!initials) {
+      const name = userObject?.fullName || userObject?.full_name || userObject?.username || '?';
+      initials = name.charAt(0).toUpperCase();
+    }
+    return (
+      <div className={`${sizeClass} rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center font-bold uppercase border border-[var(--border)]`}>
+        {initials}
+      </div>
+    );
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
 
@@ -260,14 +300,18 @@ export default function AssignedDeliveryDetail() {
                   <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
                     Customer Details
                   </h3>
-                  <div>
-                    <span className="text-xs text-[var(--muted-foreground)] block">Name</span>
-                    <span className="text-sm font-semibold text-[var(--foreground)]">
-                      {order.Users?.fullName ||
-                        order.Users?.firstName ||
-                        order.Users?.username ||
-                        'Customer'}
-                    </span>
+                  <div className="flex items-center gap-3">
+                    <UserAvatar userObject={order.Users} sizeClass="w-10 h-10 text-sm" />
+                    <div>
+                      <span className="text-xs text-[var(--muted-foreground)] block">Name</span>
+                      <span className="text-sm font-semibold text-[var(--foreground)]">
+                        {[order.Users?.first_name, order.Users?.last_name].filter(Boolean).join(' ') ||
+                          order.Users?.fullName ||
+                          order.Users?.firstName ||
+                          order.Users?.username ||
+                          'Customer'}
+                      </span>
+                    </div>
                   </div>
                   <div>
                     <span className="text-xs text-[var(--muted-foreground)] block">Contact Phone</span>
@@ -281,7 +325,7 @@ export default function AssignedDeliveryDetail() {
                   <div>
                     <span className="text-xs text-[var(--muted-foreground)] block">Delivery Address</span>
                     <span className="text-sm font-bold text-[var(--foreground)] block">
-                      {order.Addresses?.title || 'Address'}
+                      {getShortAddress(order.Addresses)}
                     </span>
                     <span className="text-sm text-[var(--muted-foreground)] block">
                       {order.Addresses?.address}

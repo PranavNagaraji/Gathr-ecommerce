@@ -15,6 +15,21 @@ export default function AssignedDeliveriesList() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  const getShortAddress = (addr) => {
+    if (!addr) return '-';
+    if (addr.address) {
+      const parts = addr.address.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        if (/^\d+$/.test(parts[0]) || parts[0].length <= 3) {
+          return parts.slice(0, 2).join(', ');
+        }
+        return parts[0];
+      }
+      return addr.address;
+    }
+    return '-';
+  };
+
   useEffect(() => {
     if (!isLoaded || !isSignedIn || !user) return;
 
@@ -106,7 +121,7 @@ export default function AssignedDeliveriesList() {
                         </div>
                         <div>
                           <h3 className="text-xs uppercase font-bold text-[var(--muted-foreground)] tracking-wider">Delivery Address</h3>
-                          <p className="text-sm font-semibold mt-0.5">{order.Addresses?.title || 'Customer Address'}</p>
+                          <p className="text-sm font-semibold mt-0.5">{getShortAddress(order.Addresses)}</p>
                           <p className="text-sm text-[var(--muted-foreground)]">{order.Addresses?.address}</p>
                         </div>
                       </div>

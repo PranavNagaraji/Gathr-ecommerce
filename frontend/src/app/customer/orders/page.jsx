@@ -71,6 +71,32 @@ const Orders = () => {
     return '-';
   };
 
+  const UserAvatar = ({ userObject, sizeClass = "w-8 h-8 text-xs" }) => {
+    const url = userObject?.delivery_details?.profile?.url || userObject?.profile_image || userObject?.imageUrl;
+    if (url && url !== '/avatar.svg') {
+      return (
+        <img
+          src={url}
+          alt="Profile"
+          className={`${sizeClass} rounded-full object-cover border border-[var(--border)]`}
+        />
+      );
+    }
+    const first = userObject?.first_name || userObject?.firstName || '';
+    const last = userObject?.last_name || userObject?.lastName || '';
+    let initials = (first.charAt(0) + last.charAt(0)).toUpperCase();
+    if (!initials) {
+      const name = userObject?.fullName || userObject?.full_name || userObject?.username || '?';
+      initials = name.charAt(0).toUpperCase();
+    }
+    return (
+      <div className={`${sizeClass} rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] flex items-center justify-center font-bold uppercase border border-[var(--border)]`}>
+        {initials}
+      </div>
+    );
+  };
+
+
   useEffect(() => {
     const getOrders = async () => {
       if (!isLoaded || !isSignedIn || !user) return;
@@ -195,11 +221,7 @@ const Orders = () => {
                 </dl>
                 {order.Users ? (
                   <div className="mt-4 flex items-center gap-3">
-                    <img
-                      src={order.Users?.delivery_details?.profile?.url || '/avatar.svg'}
-                      alt="Delivery profile"
-                      className="w-8 h-8 rounded-full object-cover border border-[var(--border)]"
-                    />
+                    <UserAvatar userObject={order.Users} sizeClass="w-8 h-8 text-xs" />
                     <div className="text-sm">
                       <p className="font-medium leading-tight">{[order.Users?.first_name, order.Users?.last_name].filter(Boolean).join(' ') || 'Delivery Partner'}</p>
                       <p className="text-xs text-[var(--muted-foreground)]">{order.Users?.delivery_details?.phone || 'Phone N/A'}</p>

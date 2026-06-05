@@ -33,6 +33,21 @@ export default function NearbyOrders() {
   const [isDetectingLocation, setIsDetectingLocation] = useState(false);
   const [locationError, setLocationError] = useState(false);
 
+  const getShortAddress = (addr) => {
+    if (!addr) return '-';
+    if (addr.address) {
+      const parts = addr.address.split(',').map(s => s.trim()).filter(Boolean);
+      if (parts.length > 1) {
+        if (/^\d+$/.test(parts[0]) || parts[0].length <= 3) {
+          return parts.slice(0, 2).join(', ');
+        }
+        return parts[0];
+      }
+      return addr.address;
+    }
+    return '-';
+  };
+
   const getBrowserLocation = useCallback(() => {
     if (typeof window !== "undefined" && "geolocation" in navigator) {
       setIsDetectingLocation(true);
@@ -259,7 +274,7 @@ export default function NearbyOrders() {
                         </div>
                         <div>
                           <h3 className="text-xs uppercase font-bold text-[var(--muted-foreground)] tracking-wider">Delivery Address</h3>
-                          <p className="text-sm font-semibold mt-0.5">{order.Addresses?.title || 'Customer Address'}</p>
+                          <p className="text-sm font-semibold mt-0.5">{getShortAddress(order.Addresses)}</p>
                           <p className="text-sm text-[var(--muted-foreground)]">{order.Addresses?.address}</p>
                         </div>
                       </div>

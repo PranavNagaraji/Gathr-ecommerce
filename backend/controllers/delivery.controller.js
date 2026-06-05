@@ -141,7 +141,22 @@ export const getOnTheWay = async (req, res) => {
         if (error) {
             return res.status(403).json({ error });
         }
-        return res.status(200).json({ ShopsAndAddresses: onethewayOrders });
+
+        const ordersWithImages = await Promise.all(
+            (onethewayOrders || []).map(async (ord) => {
+                if (ord.Users && ord.Users.clerk_id) {
+                    try {
+                        const clerkUser = await clerk.users.getUser(ord.Users.clerk_id);
+                        ord.Users.profile_image = clerkUser.imageUrl;
+                    } catch (err) {
+                        console.log(`Failed to get Clerk profile image for customer ${ord.Users.clerk_id}:`, err.message);
+                    }
+                }
+                return ord;
+            })
+        );
+
+        return res.status(200).json({ ShopsAndAddresses: ordersWithImages });
     } catch (err) {
         console.error("Unexpected error:", err);
         return res.status(500).json({ message: "Internal server error" });
