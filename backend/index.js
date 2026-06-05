@@ -168,7 +168,7 @@ async function ensureWishlistSchema() {
     await client.query('begin');
     await client.query(sql);
     await client.query('commit');
-    console.log('[ensureWishlistSchema] wishlist schema ensured');
+    // console.log('[ensureWishlistSchema] wishlist schema ensured');
   } catch (e) {
     await client.query('rollback');
     console.error('[ensureWishlistSchema] migration failed:', e.message);

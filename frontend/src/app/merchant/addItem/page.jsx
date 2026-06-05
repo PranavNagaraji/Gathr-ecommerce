@@ -176,9 +176,10 @@ export default function addItemPage() {
     const [otherCategory, setOtherCategory] = useState("")
     const [aiLoading, setAiLoading] = useState(false)
     const [barcodeBusy, setBarcodeBusy] = useState(false)
-    const [barcodeMenuOpen, setBarcodeMenuOpen] = useState(false)
-    const barcodeCameraRef = useRef(null)
-    const barcodeUploadRef = useRef(null)
+    const barcodeFileRef = useRef(null)
+    const folderInputRef = useRef(null)
+    const cameraInputRef = useRef(null)
+    const [isDragging, setIsDragging] = useState(false)
     const [barcodeLastImage, setBarcodeLastImage] = useState('')
     const [bandRatio, setBandRatio] = useState(45) // percent
     // image center/crop modal
@@ -192,7 +193,6 @@ export default function addItemPage() {
     const [barcodeCenterOffset, setBarcodeCenterOffset] = useState({ x: 0, y: 0 })
     const [barcodeCenterRotate, setBarcodeCenterRotate] = useState(0)
     const barcodeCenterDrag = useRef(null)
-    const [isScanning, setIsScanning] = useState(false)
     const [scanOverlay, setScanOverlay] = useState({ active: false, state: 'scanning', errorMsg: '' });
     const scanAbortControllerRef = useRef(null);
 
@@ -213,7 +213,6 @@ export default function addItemPage() {
         }
         setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
         setBarcodeBusy(false);
-        setIsScanning(false);
         setBarcodeCenterOpen(false);
     };
 
@@ -579,24 +578,14 @@ export default function addItemPage() {
             setBarcodeCenterOffset({ x: 0, y: 0 });
             setBarcodeCenterRotate(0);
             setBarcodeCenterOpen(true);
-            setBarcodeMenuOpen(false);
         } finally {
-            if (barcodeCameraRef.current) barcodeCameraRef.current.value = '';
-            if (barcodeUploadRef.current) barcodeUploadRef.current.value = '';
+            if (barcodeFileRef.current) barcodeFileRef.current.value = '';
         }
     };
 
     const handleScanToggle = () => {
-        if (barcodeBusy) return;
-        if (!isScanning) {
-            setIsScanning(true);
-            setBarcodeMenuOpen(true);
-        } else {
-            setBarcodeMenuOpen(false);
-            setBarcodeCenterOpen(false);
-            setCropOpen(false);
-            setIsScanning(false);
-        }
+        if (barcodeBusy || scanOverlay.active) return;
+        if (barcodeFileRef.current) barcodeFileRef.current.click();
     };
     const handleCategoryChange = (e) => {
         const { value, checked } = e.target;
@@ -612,27 +601,62 @@ export default function addItemPage() {
         });
     };
 
-    const handleImageChange = (e) => {
-        const files = Array.from(e.target.files);
-        const readers = [];
+    const handleFiles = (files) => {
+        const fileList = Array.from(files).filter(file => file.type.startsWith('image/'));
+        if (fileList.length === 0) return;
 
-        files.forEach((file) => {
-            const reader = new FileReader();
-            readers.push(
-                new Promise((resolve, reject) => {
-                    reader.onloadend = () => resolve(reader.result);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                })
-            );
+        const readers = fileList.map(file => {
+            return new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onloadend = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+            });
         });
 
         Promise.all(readers).then((base64Images) => {
             setFormData((prev) => ({
                 ...prev,
-                images: [...prev.images, ...base64Images], // append to existing images
+                images: [...(prev.images || []), ...base64Images],
             }));
+            setActiveIndex((prev) => (formData.images.length === 0 ? 0 : prev));
         });
+    };
+
+    const handleImageChange = (e) => {
+        if (e.target.files) {
+            handleFiles(e.target.files);
+        }
+    };
+
+    const handleDragOver = (e) => {
+        e.preventDefault();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e) => {
+        e.preventDefault();
+        setIsDragging(false);
+        if (e.dataTransfer.files) {
+            handleFiles(e.dataTransfer.files);
+        }
+    };
+
+    const handleFolderUploadClick = () => {
+        if (folderInputRef.current) {
+            folderInputRef.current.click();
+        }
+    };
+
+    const handleCameraUploadClick = () => {
+        if (cameraInputRef.current) {
+            cameraInputRef.current.click();
+        }
     };
     const handleRemoveImage = (index) => {
         setFormData((prev) => ({
@@ -800,142 +824,157 @@ export default function addItemPage() {
             }}
         >
             <div className="min-h-screen p-4 md:p-8 bg-[var(--background)] text-[var(--foreground)]">
-                <div className="max-w-7xl mx-auto">
-                    <h1 className="text-3xl md:text-4xl font-bold mb-6">Add Item</h1>
-                    {/* Top Scan/Lookup Section */}
-                    <div className="mb-6 rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 md:p-5 shadow-sm">
-                      <div className="flex flex-col md:flex-row md:items-center gap-3">
-                        <div className="relative">
-                          <button
-                            type="button"
-                            onClick={handleScanToggle}
-                            disabled={barcodeBusy || scanOverlay.active}
-                            className={`inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed ${isScanning ? 'ring-2 ring-[var(--ring)]' : ''} ${scanOverlay.active ? '!bg-gray-400 !text-gray-200 dark:!bg-gray-700 dark:!text-gray-500' : ''}`}
-                          >
-                            {isScanning ? 'Scanning…' : 'Scan'}
-                          </button>
-                          {barcodeMenuOpen && (
-                            <div className="absolute z-[10000] mt-2 w-56 rounded-md border border-[var(--border)] bg-[var(--popover)] text-[var(--popover-foreground)] shadow-2xl">
-                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => barcodeCameraRef.current && barcodeCameraRef.current.click()} disabled={barcodeBusy || scanOverlay.active}>Use Camera</button>
-                              <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => barcodeUploadRef.current && barcodeUploadRef.current.click()} disabled={barcodeBusy || scanOverlay.active}>Upload Photo</button>
-                            </div>
-                          )}
-                          <input ref={barcodeCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e)=> onBarcodeImageChosen(e.target.files?.[0])} />
-                          <input ref={barcodeUploadRef} type="file" accept="image/*" className="hidden" onChange={(e)=> onBarcodeImageChosen(e.target.files?.[0])} />
-                        </div>
-                        <div className="flex-1 flex gap-2">
-                          <input
-                            type="text"
-                            inputMode="numeric"
-                            placeholder="Enter barcode manually"
-                            value={barcodeManual}
-                            disabled={barcodeBusy || scanOverlay.active}
-                            onChange={(e)=> setBarcodeManual(e.target.value)}
-                            className="flex-1 px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--background)] disabled:opacity-50 disabled:cursor-not-allowed"
-                          />
-                          <button type="button" onClick={handleManualBarcodeLookup} disabled={barcodeBusy || scanOverlay.active || !barcodeManual.trim()} className="px-4 py-2 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] disabled:opacity-60 disabled:cursor-not-allowed">Lookup</button>
-                        </div>
-                      </div>
-                      {/* advanced band slider removed in favor of visual centering modal */}
+                <div className="max-w-7xl mx-auto space-y-8">
+                    {/* Header */}
+                    <div className="flex flex-col gap-1">
+                        <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Add New Product</h1>
+                        <p className="text-sm text-[var(--muted-foreground)]">Create a new item in your store inventory.</p>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-10">
-                        {/* Details - LEFT (3/5) */}
-                        <form onSubmit={handleSubmit} className="md:col-span-3 flex flex-col gap-6">
-                            <div>
-                                <label className="text-sm font-medium text-[var(--muted-foreground)]">Item Name</label>
+
+                    {/* Top Scan/Lookup Section */}
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4">
+                        <div className="flex items-center gap-2 text-[var(--primary)] font-semibold text-lg">
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h.01M16 12h.01M21 12h.01M12 16h.01M12 20h.01M4 12h.01M4 4h16v16H4V4z"></path>
+                            </svg>
+                            <h2>Lookup via Barcode</h2>
+                        </div>
+                        <div className="flex flex-col md:flex-row md:items-center gap-3">
+                            <div className="relative">
+                                <button
+                                    type="button"
+                                    onClick={handleScanToggle}
+                                    disabled={barcodeBusy || scanOverlay.active}
+                                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed font-medium transition-all ${scanOverlay.active ? '!bg-gray-400 !text-gray-200 dark:!bg-gray-700 dark:!text-gray-500' : ''}`}
+                                >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
+                                    {barcodeBusy ? 'Scanning…' : 'Scan Barcode'}
+                                </button>
+                                <input ref={barcodeFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => onBarcodeImageChosen(e.target.files?.[0])} />
+                            </div>
+                            <div className="flex-1 flex gap-2">
                                 <input
                                     type="text"
-                                    name="name"
-                                    value={formData.name}
-                                    onChange={handleChange}
-                                    placeholder="Enter item name"
-                                    className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors"
+                                    inputMode="numeric"
+                                    placeholder="Enter EAN/UPC barcode manually (e.g. 5900123456789)"
+                                    value={barcodeManual}
+                                    disabled={barcodeBusy || scanOverlay.active}
+                                    onChange={(e)=> setBarcodeManual(e.target.value)}
+                                    className="flex-1 px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 />
-                                {isDuplicateTitle && (
-                                    <p className="text-amber-500 text-sm mt-1 animate-pulse">
-                                        ⚠️ A product with this title already exists.
-                                    </p>
-                                )}
+                                <button type="button" onClick={handleManualBarcodeLookup} disabled={barcodeBusy || scanOverlay.active || !barcodeManual.trim()} className="px-5 py-2.5 rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] text-[var(--foreground)] font-medium disabled:opacity-60 disabled:cursor-not-allowed transition-colors">Lookup</button>
                             </div>
+                        </div>
+                    </div>
 
-                            {/* advanced scan moved to top section */}
-
-                            <div>
-                                <div className="flex items-center justify-between">
-                                    <label className="text-sm font-medium text-[var(--muted-foreground)]">Description</label>
-                                    <button type="button" onClick={handleGenerateAI} disabled={aiLoading || !(formData.images && formData.images.length)} className={`text-xs px-3 py-1 rounded border border-[var(--border)] ${aiLoading ? 'opacity-60 cursor-not-allowed' : 'hover:bg-[var(--muted)]'}`}>
-                                        {aiLoading ? 'Generating…' : 'Generate with AI'}
-                                    </button>
-                                </div>
-                                <textarea
-                                    name="description"
-                                    placeholder="Enter description"
-                                    value={formData.description}
-                                    onChange={handleChange}
-                                    className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors"
-                                    rows={3}
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-start">
+                        {/* Details - LEFT (3/5) */}
+                        <form onSubmit={handleSubmit} className="md:col-span-3 space-y-6">
+                            {/* Card 1: Basic Information */}
+                            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-6">
+                                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Basic Information</h2>
                                 <div>
-                                    <label className="text-sm font-medium text-[var(--muted-foreground)]">Quantity</label>
+                                    <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">Item Name / Title</label>
                                     <input
-                                        type="number"
-                                        value={formData.quantity}
+                                        type="text"
+                                        name="name"
+                                        value={formData.name}
                                         onChange={handleChange}
-                                        name="quantity"
-                                        placeholder="Enter quantity"
-                                        className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors"
+                                        placeholder="e.g. Organic Bananas (Bundle)"
+                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all placeholder:text-[var(--muted-foreground)]"
+                                    />
+                                    {isDuplicateTitle && (
+                                        <p className="text-amber-500 text-sm mt-1 animate-pulse flex items-center gap-1">
+                                            <span>⚠️</span> A product with this title already exists.
+                                        </p>
+                                    )}
+                                </div>
+
+                                <div>
+                                    <div className="flex items-center justify-between mb-2">
+                                        <label className="text-sm font-semibold text-[var(--foreground)]">Description</label>
+                                        <button
+                                            type="button"
+                                            onClick={handleGenerateAI}
+                                            disabled={aiLoading || !(formData.images && formData.images.length)}
+                                            className={`text-xs px-2.5 py-1.5 rounded-md border border-[var(--border)] flex items-center gap-1.5 font-medium transition-all ${
+                                                aiLoading || !(formData.images && formData.images.length)
+                                                    ? 'opacity-50 cursor-not-allowed bg-[var(--muted)]'
+                                                    : 'hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+                                            }`}
+                                        >
+                                            {/* AI/Sparkles SVG Icon */}
+                                            <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                                            </svg>
+                                            {aiLoading ? 'Generating…' : 'Generate with AI'}
+                                        </button>
+                                    </div>
+                                    <textarea
+                                        name="description"
+                                        placeholder="Describe features, size, ingredients or other details..."
+                                        value={formData.description}
+                                        onChange={handleChange}
+                                        className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all placeholder:text-[var(--muted-foreground)]"
+                                        rows={4}
                                     />
                                 </div>
-                                <div>
-                                    <label className="text-sm font-medium text-[var(--muted-foreground)]">Price</label>
-                                    <input
-                                        type="number"
-                                        value={formData.price}
-                                        onChange={handleChange}
-                                        name="price"
-                                        placeholder="Enter price"
-                                        min={1}
-                                        className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors"
-                                    />
-                                </div>
                             </div>
 
-                            <div>
-                                <label className="text-sm font-medium text-[var(--muted-foreground)] mb-2 block">Categories</label>
-                                <Select
-                                    mode="multiple"
-                                    allowClear
-                                    style={{ width: '100%' }}
-                                    placeholder="Select categories"
-                                    value={formData.category}
-                                    onChange={(values) => setFormData(prev => ({ ...prev, category: values }))}
-                                    options={[...new Set([...categoryOptions, 'Other'])].map(cat => ({ label: cat, value: cat }))}
-                                    size="large"
-                                    styles={{ popup: { root: { background: 'var(--popover)', color: 'var(--popover-foreground)' } } }}
-                                />
-                                {formData.category.includes('Other') && (
-                                    <div className="mt-4">
-                                        <label className="text-sm font-medium text-[var(--muted-foreground)]">New Category Name</label>
+                            {/* Card 2: Pricing & Stock */}
+                            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-6">
+                                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Pricing & Inventory</h2>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div>
+                                        <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">Quantity in Stock</label>
                                         <input
-                                            type="text"
-                                            value={otherCategory}
-                                            onChange={(e) => setOtherCategory(e.target.value)}
-                                            onBlur={() => {
-                                                const newCat = otherCategory.trim();
-                                                if (newCat) {
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        category: [...new Set(prev.category.filter(c => c !== 'Other').concat(newCat))]
-                                                    }));
-                                                    setOtherCategory("");
-                                                }
-                                            }}
-                                            onKeyDown={(e) => {
-                                                if (e.key === 'Enter') {
-                                                    e.preventDefault();
+                                            type="number"
+                                            value={formData.quantity}
+                                            onChange={handleChange}
+                                            name="quantity"
+                                            placeholder="e.g. 50"
+                                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all placeholder:text-[var(--muted-foreground)]"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">Price (INR)</label>
+                                        <input
+                                            type="number"
+                                            value={formData.price}
+                                            onChange={handleChange}
+                                            name="price"
+                                            placeholder="e.g. 150"
+                                            min={1}
+                                            className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all placeholder:text-[var(--muted-foreground)]"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Card 3: Categories */}
+                            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-6">
+                                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Categorization</h2>
+                                <div>
+                                    <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">Product Categories</label>
+                                    <Select
+                                        mode="multiple"
+                                        allowClear
+                                        style={{ width: '100%' }}
+                                        placeholder="Select one or more categories"
+                                        value={formData.category}
+                                        onChange={(values) => setFormData(prev => ({ ...prev, category: values }))}
+                                        options={[...new Set([...categoryOptions, 'Other'])].map(cat => ({ label: cat, value: cat }))}
+                                        size="large"
+                                        styles={{ popup: { root: { background: 'var(--popover)', color: 'var(--popover-foreground)' } } }}
+                                    />
+                                    {formData.category.includes('Other') && (
+                                        <div className="mt-4 animate-fadeIn">
+                                            <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">New Category Name</label>
+                                            <input
+                                                type="text"
+                                                value={otherCategory}
+                                                onChange={(e) => setOtherCategory(e.target.value)}
+                                                onBlur={() => {
                                                     const newCat = otherCategory.trim();
                                                     if (newCat) {
                                                         setFormData(prev => ({
@@ -944,28 +983,65 @@ export default function addItemPage() {
                                                         }));
                                                         setOtherCategory("");
                                                     }
-                                                }
-                                            }}
-                                            className="w-full mt-2 bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:border-[var(--primary)]"
-                                            placeholder="Type new category and press Enter"
-                                        />
-                                    </div>
-                                )}
+                                                }}
+                                                onKeyDown={(e) => {
+                                                    if (e.key === 'Enter') {
+                                                        e.preventDefault();
+                                                        const newCat = otherCategory.trim();
+                                                        if (newCat) {
+                                                            setFormData(prev => ({
+                                                                ...prev,
+                                                                category: [...new Set(prev.category.filter(c => c !== 'Other').concat(newCat))]
+                                                            }));
+                                                            setOtherCategory("");
+                                                        }
+                                                    }
+                                                }}
+                                                className="w-full rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all placeholder:text-[var(--muted-foreground)]"
+                                                placeholder="Type new category and press Enter"
+                                            />
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
+                            {/* Submit Button */}
                             <button
                                 type="submit"
-                                className="w-full bg-[var(--primary)] hover:opacity-90 text-[var(--primary-foreground)] font-semibold py-3 rounded-lg transition-all duration-300"
+                                className="w-full bg-[var(--primary)] hover:opacity-95 text-[var(--primary-foreground)] font-bold py-3.5 rounded-xl transition-all duration-300 shadow-md flex items-center justify-center gap-2 hover:scale-[1.01]"
                             >
-                                Add Item
+                                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4"></path>
+                                </svg>
+                                Add Product to Inventory
                             </button>
                         </form>
 
                         {/* Images - RIGHT (2/5) */}
-                        <div className="md:col-span-2 md:order-last md:sticky md:top-8 h-fit">
-                            <label className="text-sm font-medium mb-2 block text-[var(--muted-foreground)]">Item Images</label>
-                            <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-                                <div className="relative aspect-square w-full">
+                        <div className="md:col-span-2 md:sticky md:top-8 space-y-6">
+                            <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-4">
+                                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Product Images</h2>
+                                
+                                {/* Hidden input tags wired to ref hooks */}
+                                <input
+                                    ref={folderInputRef}
+                                    type="file"
+                                    multiple
+                                    accept="image/*"
+                                    onChange={handleImageChange}
+                                    className="hidden"
+                                />
+                                <input
+                                    ref={cameraInputRef}
+                                    type="file"
+                                    accept="image/*"
+                                    capture="environment"
+                                    onChange={handleImageChange}
+                                    className="hidden"
+                                />
+
+                                {/* Carousel Preview Box */}
+                                <div className="relative aspect-square w-full rounded-xl overflow-hidden border border-[var(--border)] bg-[var(--background)]">
                                     {formData.images && formData.images.length > 0 ? (
                                         <img
                                             src={formData.images[activeIndex]}
@@ -973,36 +1049,52 @@ export default function addItemPage() {
                                             className="w-full h-full object-cover"
                                         />
                                     ) : (
-                                        <div className="w-full h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">No images</div>
+                                        <div className="w-full h-full flex flex-col items-center justify-center gap-2 text-sm text-[var(--muted-foreground)] p-4 text-center">
+                                            <svg className="w-12 h-12 text-[var(--border)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+                                            </svg>
+                                            <span>No images uploaded yet</span>
+                                        </div>
                                     )}
                                     {formData.images && formData.images.length > 0 && (
-                                      <button type="button" onClick={()=>{ setCropOpen(true); setCropScale(1); setCropOffset({x:0,y:0}); }} className="absolute top-2 right-2 px-3 py-1.5 rounded-md bg-[var(--popover)]/80 border border-[var(--border)] text-sm">Edit & Center</button>
+                                        <button
+                                            type="button"
+                                            onClick={() => { setCropOpen(true); setCropScale(1); setCropOffset({ x: 0, y: 0 }); }}
+                                            className="absolute top-3 right-3 px-3 py-1.5 rounded-lg bg-[var(--popover)]/90 backdrop-blur-sm border border-[var(--border)] text-sm font-semibold hover:bg-[var(--muted)] transition-colors shadow-sm"
+                                        >
+                                            Edit & Center
+                                        </button>
                                     )}
                                     {formData.images && formData.images.length > 1 && (
                                         <>
-                                            <button type="button" onClick={goPrev} className="absolute left-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-[var(--popover)]/80 text-[var(--popover-foreground)] border border-[var(--border)] hover:bg-[var(--accent)]/50 transition">‹</button>
-                                            <button type="button" onClick={goNext} className="absolute right-2 top-1/2 -translate-y-1/2 h-9 w-9 rounded-full bg-[var(--popover)]/80 text-[var(--popover-foreground)] border border-[var(--border)] hover:bg-[var(--accent)]/50 transition">›</button>
+                                            <button type="button" onClick={goPrev} className="absolute left-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-[var(--popover)]/90 backdrop-blur-sm text-[var(--popover-foreground)] border border-[var(--border)] hover:bg-[var(--accent)] hover:scale-105 shadow-md flex items-center justify-center font-bold text-lg transition-all select-none">‹</button>
+                                            <button type="button" onClick={goNext} className="absolute right-3 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full bg-[var(--popover)]/90 backdrop-blur-sm text-[var(--popover-foreground)] border border-[var(--border)] hover:bg-[var(--accent)] hover:scale-105 shadow-md flex items-center justify-center font-bold text-lg transition-all select-none">›</button>
                                         </>
                                     )}
                                 </div>
 
+                                {/* Thumbnail Carousel Grid */}
                                 {formData.images && formData.images.length > 0 && (
-                                    <div className="grid grid-cols-5 gap-2 p-3 bg-[var(--card)] border-t border-[var(--border)]">
+                                    <div className="grid grid-cols-5 gap-2 p-1 max-h-32 overflow-y-auto">
                                         {formData.images.map((img, i) => (
                                             <div
                                                 key={i}
                                                 onClick={() => setActiveIndex(i)}
-                                                onKeyDown={(e)=> { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveIndex(i); } }}
+                                                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setActiveIndex(i); } }}
                                                 role="button"
                                                 tabIndex={0}
-                                                className={`relative aspect-square rounded-md overflow-hidden border cursor-pointer ${i === activeIndex ? 'border-[var(--primary)]' : 'border-[var(--border)]'}`}
+                                                className={`relative aspect-square rounded-lg overflow-hidden border cursor-pointer transition-all ${
+                                                    i === activeIndex
+                                                        ? 'border-[var(--primary)] ring-2 ring-[var(--primary)]/20 scale-95 shadow-sm'
+                                                        : 'border-[var(--border)] hover:opacity-85'
+                                                }`}
                                                 aria-label={`Select image ${i + 1}`}
                                             >
                                                 <img src={img} alt={`thumb-${i}`} className="w-full h-full object-cover" />
                                                 <button
                                                     type="button"
                                                     onClick={(e) => { e.stopPropagation(); handleRemoveImage(i) }}
-                                                    className="absolute -top-1 -right-1 bg-red-600 text-white rounded-full w-5 h-5 flex items-center justify-center text-xs"
+                                                    className="absolute top-0.5 right-0.5 bg-black/60 hover:bg-red-600 text-white rounded-full w-4 h-4 flex items-center justify-center text-[9px] transition-colors"
                                                     aria-label={`Remove image ${i + 1}`}
                                                 >
                                                     ✕
@@ -1011,24 +1103,62 @@ export default function addItemPage() {
                                         ))}
                                     </div>
                                 )}
+
+                                {/* Unified Bordered Dropzone Area */}
+                                <div
+                                    onDragOver={handleDragOver}
+                                    onDragLeave={handleDragLeave}
+                                    onDrop={handleDrop}
+                                    onClick={(e) => {
+                                        if (e.target.closest('.camera-btn')) return;
+                                        handleFolderUploadClick();
+                                    }}
+                                    className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
+                                        isDragging
+                                            ? 'border-[var(--primary)] bg-[var(--primary)]/5'
+                                            : 'border-[var(--border)] hover:border-[var(--primary)] hover:bg-[var(--muted)]/30'
+                                    } ${formData.images && formData.images.length > 0 ? 'mt-4 py-4 px-4 gap-2 text-sm' : ''}`}
+                                >
+                                    {/* Cloud Icon */}
+                                    <svg className={`mx-auto text-[var(--muted-foreground)] transition-colors ${formData.images && formData.images.length > 0 ? 'w-8 h-8' : 'w-12 h-12'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.75" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"></path>
+                                    </svg>
+                                    
+                                    <div className="space-y-0.5">
+                                        <p className="font-semibold text-sm text-[var(--foreground)]">
+                                            Drag & drop or click to upload
+                                        </p>
+                                        {!(formData.images && formData.images.length > 0) && (
+                                            <p className="text-xs text-[var(--muted-foreground)]">
+                                                Supports PNG, JPG, JPEG
+                                            </p>
+                                        )}
+                                    </div>
+
+                                    <div className="flex items-center justify-center gap-3 mt-1">
+                                        <button
+                                            type="button"
+                                            className="px-3 py-1.5 text-xs font-semibold rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors shadow-sm"
+                                        >
+                                            Choose from folder
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCameraUploadClick();
+                                            }}
+                                            className="camera-btn px-3 py-1.5 text-xs font-semibold rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm"
+                                        >
+                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
+                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
+                                            </svg>
+                                            Use Camera
+                                        </button>
+                                    </div>
+                                </div>
                             </div>
-
-                            <label
-                                htmlFor="file-upload"
-                                className="mt-4 block w-full text-center py-3 px-4 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] font-medium cursor-pointer transition-colors"
-                            >
-                                Upload Images
-                            </label>
-                            <input
-                                id="file-upload"
-                                type="file"
-                                multiple
-                                accept="image/*"
-                                onChange={handleImageChange}
-                                className="hidden"
-                            />
-
-                            {/* Scan section moved to top */}
                         </div>
                     </div>
                 </div>
@@ -1096,7 +1226,7 @@ export default function addItemPage() {
                 <div className="w-[92vw] max-w-3xl rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
                   <div className="p-3 border-b border-[var(--border)] flex items-center justify-between">
                     <div className="font-semibold">Center barcode image</div>
-                    <button type="button" onClick={()=> { setBarcodeCenterOpen(false); setIsScanning(false); }} className="px-2 py-1 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">Close</button>
+                    <button type="button" onClick={()=> { setBarcodeCenterOpen(false); }} className="px-2 py-1 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">Close</button>
                   </div>
                   <div className="p-4 grid gap-4 relative">
                     {barcodeBusy && (
@@ -1199,7 +1329,6 @@ export default function addItemPage() {
                           }));
                           setActiveIndex(0);
                           setBarcodeCenterOpen(false);
-                          setIsScanning(false);
                           setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
                         } catch (err) {
                           if (err.name === 'AbortError' || signal.aborted) {

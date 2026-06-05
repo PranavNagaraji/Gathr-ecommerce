@@ -720,6 +720,7 @@ export const addToCart = async (req, res) => {
     .from("Cart_items")
     .select("Items(shop_id)")
     .eq("cart_id", cartId)
+    .is("order_id", null)
     .limit(1)
     .maybeSingle();
   if (cartItemError) {
@@ -870,3 +871,60 @@ export const deleteFromCart = async (req, res) => {
 
   return res.status(200).json({ message: "Item removed successfully", cartItem });
 };
+
+// clearCart: remove ALL items from the active cart and restore stock
+export const clearCart = async (req, res) => {
+  const { clerkId } = req.body;
+  if (!clerkId) return res.status(400).json({ message: "Missing clerkId" });
+
+  const { data: user, error: userError } = await supabase
+    .from("Users")
+    .select("id, role")
+    .eq("clerk_id", clerkId)
+    .single();
+  if (userError || !user) return res.status(404).json({ message: "User not found" });
+  if (user.role !== "customer") return res.status(403).json({ message: "Unauthorized" });
+
+  const { data: cart, error: cartError } = await supabase
+    .from("Cart")
+    .select("id")
+    .eq("user_id", user.id)
+    .eq("status", "active")
+    .maybeSingle();
+  if (cartError) return res.status(500).json({ message: "Failed to fetch cart" });
+  if (!cart) return res.status(200).json({ message: "Cart already empty" });
+
+  const { data: cartItems, error: ciError } = await supabase
+    .from("Cart_items")
+    .select("id, item_id, quantity")
+    .eq("cart_id", cart.id)
+    .is("order_id", null);
+  if (ciError) return res.status(500).json({ message: "Failed to fetch cart items" });
+
+  // Restore stock for each cart item
+  for (const ci of cartItems || []) {
+    const { data: stockItem } = await supabase
+      .from("Items")
+      .select("quantity")
+      .eq("id", ci.item_id)
+      .single();
+    if (stockItem) {
+      await supabase
+        .from("Items")
+        .update({ quantity: stockItem.quantity + ci.quantity })
+        .eq("id", ci.item_id);
+    }
+  }
+
+  // Bulk-delete all cart items
+  if ((cartItems || []).length > 0) {
+    await supabase
+      .from("Cart_items")
+      .delete()
+      .eq("cart_id", cart.id)
+      .is("order_id", null);
+  }
+
+  return res.status(200).json({ message: "Cart cleared successfully" });
+};
+

@@ -2,6 +2,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { useEffect, useState, useRef } from "react";
+import ReactDOM from "react-dom";
 import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
@@ -18,6 +19,9 @@ function ShopItemsContent() {
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   const [items, setItems] = useState([]);
+  const [shopConflictModal, setShopConflictModal] = useState(false);
+  const [conflictItem, setConflictItem] = useState(null);
+  const [clearCartBusy, setClearCartBusy] = useState(false);
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(12);
   const [total, setTotal] = useState(0);
@@ -352,10 +356,49 @@ function ShopItemsContent() {
         toast.error("Not enough stock available");
       } else {
         toast.success("Added to cart");
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cart:changed'));
       }
     } catch (err) {
       const msg = err?.response?.data?.message || "Failed to add to cart";
+      if (msg.includes("Cannot add items from different shops")) {
+        setConflictItem({ itemId, quantity });
+        setShopConflictModal(true);
+        return;
+      }
       toast.error(msg);
+    }
+  };
+
+  const handleClearCartAndAdd = async () => {
+    if (!user || clearCartBusy || !conflictItem) return;
+    setClearCartBusy(true);
+    try {
+      const token = await getToken();
+      await axios.post(
+        `${API_URL}/api/customer/clearCart`,
+        { clerkId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cart:changed'));
+      const res = await axios.post(
+        `${API_URL}/api/customer/addToCart`,
+        { itemId: conflictItem.itemId, quantity: conflictItem.quantity, clerkId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setShopConflictModal(false);
+      if (res?.data?.message === "Not enough stock available") {
+        toast.error("Not enough stock available");
+      } else {
+        toast.success("Cart cleared, item added");
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cart:changed'));
+      }
+    } catch (err) {
+      console.error("Failed to clear cart and add item:", err);
+      setShopConflictModal(false);
+      toast.error("Failed to clear cart and add item. Please try again.");
+    } finally {
+      setClearCartBusy(false);
+      setConflictItem(null);
     }
   };
 
@@ -867,6 +910,73 @@ function ShopItemsContent() {
 
       {/* Chatbot Widget */}
       <ChatbotWidget items={items} shopId={shop_id} />
+
+      {/* Shop Conflict Modal — rendered via portal so it sits at document root */}
+      {shopConflictModal && ReactDOM.createPortal(
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 99999,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)',
+          }}
+          onClick={(e) => { if (e.target === e.currentTarget) setShopConflictModal(false); }}
+        >
+          <div style={{
+            background: 'var(--card)', color: 'var(--card-foreground)',
+            border: '1px solid var(--border)', borderRadius: '1rem',
+            padding: '2rem', maxWidth: '420px', width: '90vw',
+            boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+            display: 'flex', flexDirection: 'column', gap: '1.25rem',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+              <div style={{
+                width: '2.75rem', height: '2.75rem', borderRadius: '50%',
+                background: 'color-mix(in oklab, #ef4444 20%, var(--card))',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+              }}>
+                <svg width="22" height="22" fill="none" stroke="#ef4444" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+              </div>
+              <div>
+                <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Different Shop Detected</h2>
+                <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '0.25rem 0 0' }}>Your cart has items from another shop.</p>
+              </div>
+            </div>
+            <p style={{ fontSize: '0.9rem', color: 'var(--muted-foreground)', lineHeight: 1.6, margin: 0 }}>
+              You can only order from one shop at a time. Clear your cart and add this item, or keep your current cart.
+            </p>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+              <button
+                disabled={clearCartBusy}
+                onClick={handleClearCartAndAdd}
+                style={{
+                  padding: '0.75rem 1rem', borderRadius: '0.625rem', border: 'none',
+                  cursor: clearCartBusy ? 'not-allowed' : 'pointer',
+                  background: '#ef4444', color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+                  opacity: clearCartBusy ? 0.7 : 1, transition: 'opacity 0.15s',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+                }}
+              >
+                {clearCartBusy ? 'Clearing…' : 'Clear Cart & Add'}
+              </button>
+              <button
+                disabled={clearCartBusy}
+                onClick={() => setShopConflictModal(false)}
+                style={{
+                  padding: '0.75rem 1rem', borderRadius: '0.625rem',
+                  border: '1px solid var(--border)', cursor: 'pointer',
+                  background: 'var(--muted)', color: 'var(--muted-foreground)',
+                  fontWeight: 600, fontSize: '0.95rem',
+                }}
+              >
+                Keep Cart
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 }

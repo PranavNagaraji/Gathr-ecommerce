@@ -3,6 +3,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { useEffect, useState } from "react";
+import ReactDOM from "react-dom";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
@@ -42,6 +43,10 @@ const ItemDetailsContent = () => {
   const [canRate, setCanRate] = useState(false);
   const [shop, setShop] = useState(null);
   const [shopLoading, setShopLoading] = useState(false);
+  const [shopConflictModal, setShopConflictModal] = useState(false);
+  const [clearCartBusy, setClearCartBusy] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   // Ensure page starts at top when navigating here
   useEffect(() => {
@@ -324,57 +329,62 @@ const ItemDetailsContent = () => {
         { headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.data.message === "Not enough stock available") {
-        // ANTD FIX: Use the hook instance
-        notification.warn({
-          message: "Out of Stock",
-          description: "Not enough stock available",
-        });
+        notification.warn({ message: "Out of Stock", description: "Not enough stock available" });
         setItem((prev) => ({ ...prev, quantity: res.data.stock }));
       } else {
-        // ANTD FIX: Use the hook instance
-        notification.success({
-          message: "Success",
-          description: "Item added to cart.",
-        });
+        notification.success({ message: "Success", description: "Item added to cart." });
         setItem((prev) => ({ ...prev, quantity: item.quantity - quantity }));
-        // Notify Navbar to refresh cart count immediately
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new CustomEvent('cart:changed'));
-        }
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cart:changed'));
       }
     } catch (err) {
       const msg = err?.response?.data?.message || "Failed to add to cart";
-      // Handle new backend validations
       if (msg.includes("Cannot add items from different shops")) {
-        // ANTD FIX: Use the hook instance
-        notification.error({
-          message: "Cart Error",
-          description: "You cannot add items from different shops to the same cart.",
-        });
+        setShopConflictModal(true);
         return;
       }
       if (msg.includes("Not enough stock available")) {
-        // ANTD FIX: Use the hook instance
-        notification.warn({
-          message: "Out of Stock",
-          description: "Not enough stock available.",
-        });
+        notification.warn({ message: "Out of Stock", description: "Not enough stock available." });
         return;
       }
       if (msg.includes("Quantity must be greater than 0")) {
-        // ANTD FIX: Use the hook instance
-        notification.error({
-          message: "Invalid Quantity",
-          description: "Quantity must be greater than 0.",
-        });
+        notification.error({ message: "Invalid Quantity", description: "Quantity must be greater than 0." });
         return;
       }
       console.error(err);
-      // ANTD FIX: Use the hook instance
-      notification.error({
-        message: "Error",
-        description: msg,
-      });
+      notification.error({ message: "Error", description: msg });
+    }
+  };
+
+  const handleClearCartAndAdd = async () => {
+    if (!user || clearCartBusy) return;
+    setClearCartBusy(true);
+    try {
+      const token = await getToken();
+      await axios.post(
+        `${API_URL}/api/customer/clearCart`,
+        { clerkId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cart:changed'));
+      const res = await axios.post(
+        `${API_URL}/api/customer/addToCart`,
+        { itemId: item_id, quantity: quantity, clerkId: user.id },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setShopConflictModal(false);
+      if (res.data.message === "Not enough stock available") {
+        notification.warn({ message: "Out of Stock", description: "Not enough stock available." });
+      } else {
+        notification.success({ message: "Cart cleared, item added" });
+        setItem((prev) => ({ ...prev, quantity: item.quantity - quantity }));
+        if (typeof window !== 'undefined') window.dispatchEvent(new CustomEvent('cart:changed'));
+      }
+    } catch (err) {
+      console.error("Failed to clear cart and add item:", err);
+      setShopConflictModal(false);
+      notification.error({ message: "Error", description: "Failed to clear cart and add item. Please try again." });
+    } finally {
+      setClearCartBusy(false);
     }
   };
 
@@ -438,6 +448,7 @@ const ItemDetailsContent = () => {
   }
 
   return (
+    <>
     <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] px-6 sm:px-10 lg:px-20 py-12 relative">
       <div className="max-w-6xl mx-auto z-10 relative space-y-16">
         {/* ITEM INFO */}
@@ -715,9 +726,77 @@ const ItemDetailsContent = () => {
           </motion.div>
         </div>
 
-        
+
       </div>
     </div>
+
+    {/* Shop Conflict Modal — rendered via portal so it sits at document root */}
+    {mounted && shopConflictModal && ReactDOM.createPortal(
+      <div
+        style={{
+          position: 'fixed', inset: 0, zIndex: 99999,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)',
+        }}
+        onClick={(e) => { if (e.target === e.currentTarget) setShopConflictModal(false); }}
+      >
+        <div style={{
+          background: 'var(--card)', color: 'var(--card-foreground)',
+          border: '1px solid var(--border)', borderRadius: '1rem',
+          padding: '2rem', maxWidth: '420px', width: '90vw',
+          boxShadow: '0 25px 60px rgba(0,0,0,0.4)',
+          display: 'flex', flexDirection: 'column', gap: '1.25rem',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div style={{
+              width: '2.75rem', height: '2.75rem', borderRadius: '50%',
+              background: 'color-mix(in oklab, #ef4444 20%, var(--card))',
+              display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
+            }}>
+              <svg width="22" height="22" fill="none" stroke="#ef4444" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+            </div>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>Different Shop Detected</h2>
+              <p style={{ fontSize: '0.8rem', color: 'var(--muted-foreground)', margin: '0.25rem 0 0' }}>Your cart has items from another shop.</p>
+            </div>
+          </div>
+          <p style={{ fontSize: '0.9rem', color: 'var(--muted-foreground)', lineHeight: 1.6, margin: 0 }}>
+            You can only order from one shop at a time. Clear your cart and add this item, or keep your current cart.
+          </p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '0.625rem' }}>
+            <button
+              disabled={clearCartBusy}
+              onClick={handleClearCartAndAdd}
+              style={{
+                padding: '0.75rem 1rem', borderRadius: '0.625rem', border: 'none',
+                cursor: clearCartBusy ? 'not-allowed' : 'pointer',
+                background: '#ef4444', color: '#fff', fontWeight: 700, fontSize: '0.95rem',
+                opacity: clearCartBusy ? 0.7 : 1, transition: 'opacity 0.15s',
+                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem',
+              }}
+            >
+              {clearCartBusy ? 'Clearing…' : '🗑️  Clear Cart & Add'}
+            </button>
+            <button
+              disabled={clearCartBusy}
+              onClick={() => setShopConflictModal(false)}
+              style={{
+                padding: '0.75rem 1rem', borderRadius: '0.625rem',
+                border: '1px solid var(--border)', cursor: 'pointer',
+                background: 'var(--muted)', color: 'var(--muted-foreground)',
+                fontWeight: 600, fontSize: '0.95rem',
+              }}
+            >
+              Keep Cart
+            </button>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
+    </>
   );
 };
 
