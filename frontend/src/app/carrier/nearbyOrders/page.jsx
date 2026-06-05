@@ -227,7 +227,8 @@ export default function NearbyOrders() {
             <AnimatePresence>
               {orders.map((order) => {
                 const shortId = String(order.id || '').slice(-6).toUpperCase();
-                const itemsSummary = order.Cart?.Cart_items?.map(ci => `${ci.Items?.name || 'Item'} x ${ci.quantity || 1}`).join(", ") || "No items";
+                const orderItems = order.Cart?.Cart_items?.filter(ci => String(ci.order_id) === String(order.id)) || [];
+                const itemsSummary = orderItems.map(ci => `${ci.Items?.name || 'Item'} x ${ci.quantity || 1}`).join(", ") || "No items";
 
                 return (
                   <motion.div

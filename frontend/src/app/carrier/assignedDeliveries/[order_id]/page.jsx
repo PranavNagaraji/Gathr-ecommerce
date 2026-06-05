@@ -314,7 +314,7 @@ export default function AssignedDeliveryDetail() {
                     Order Items
                   </h3>
                   <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
-                    {order.Cart?.Cart_items?.map((item) => (
+                    {order.Cart?.Cart_items?.filter(item => String(item.order_id) === String(order.id)).map((item) => (
                       <div key={item.id} className="flex justify-between items-center text-sm gap-4">
                         <div className="truncate text-[var(--foreground)]">
                           <span className="font-semibold">{item.quantity}x</span> {item.Items?.name || 'Item'}
@@ -324,7 +324,7 @@ export default function AssignedDeliveryDetail() {
                         </div>
                       </div>
                     ))}
-                    {(!order.Cart?.Cart_items || order.Cart.Cart_items.length === 0) && (
+                    {(!order.Cart?.Cart_items || order.Cart.Cart_items.filter(item => String(item.order_id) === String(order.id)).length === 0) && (
                       <p className="text-xs text-[var(--muted-foreground)]">No items loaded</p>
                     )}
                   </div>
