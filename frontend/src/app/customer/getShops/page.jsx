@@ -516,7 +516,6 @@ function CustomerDashboardContent() {
             onClick={() => setShowLocationPrompt(true)}
             className="inline-flex items-center gap-1.5 px-3 py-1 bg-[var(--muted)]/50 hover:bg-[var(--muted)] text-xs font-semibold border border-[var(--border)] rounded-full transition mt-4 text-[var(--muted-foreground)] hover:text-[var(--foreground)]"
           >
-            <span>📍</span>
             <span>{locationLabel}</span>
             <span className="text-[var(--muted-foreground)] ml-0.5 font-normal">(Change)</span>
           </button>

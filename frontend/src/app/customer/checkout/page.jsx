@@ -415,29 +415,12 @@ const Checkout = () => {
           return;
         }
 
-        // Step 2: Create order from cart with selected address
-        const orderResponse = await axios.post(
-          `${API_URL}/razorpay/create-order-from-cart`,
-          { 
-            clerkId: user.id,
-            addressId: selectedAddressId 
-          },
-          { 
-            headers: { 
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${token}` 
-            } 
-          }
-        );
-        
-        const orderId = orderResponse.data.order.id;
-        
-        // Step 3: Create Razorpay order
+        // Step 2: Create Razorpay order directly from active cart info
         const checkoutResponse = await axios.post(
           `${API_URL}/razorpay/create-checkout-session`,
           { 
-            orderId: orderId, 
-            clerkId: user.id 
+            clerkId: user.id,
+            addressId: selectedAddressId
           },
           { 
             headers: { 
@@ -447,7 +430,7 @@ const Checkout = () => {
           }
         );
 
-        // Step 4: Open Razorpay checkout overlay
+        // Step 3: Open Razorpay checkout overlay
         const options = {
           key: checkoutResponse.data.key,
           amount: checkoutResponse.data.amount,
@@ -464,6 +447,8 @@ const Checkout = () => {
                   razorpay_order_id: response.razorpay_order_id,
                   razorpay_signature: response.razorpay_signature,
                   clerkId: user.id,
+                  addressId: selectedAddressId,
+                  cartId: checkOutDetails.cart_id || checkOutDetails.cartId
                 },
                 {
                   headers: {

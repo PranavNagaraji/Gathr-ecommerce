@@ -47,7 +47,7 @@ router.post("/", requireAuth, async (req, res) => {
                   }
                 ],
                 Subject: "Your OTP Code",
-                TextPart: `Your verification code is: ${generatedOtp}\nIt expires in 5 minutes.`
+                HTMLPart: `<div>\n  <p>Your verification code is:</p>\n  <h2 style="font-size:24px;letter-spacing:4px">${generatedOtp}</h2>\n  <p>This code will expire in 5 minutes.</p>\n</div>`
               }
             ]
           }),
@@ -57,6 +57,12 @@ router.post("/", requireAuth, async (req, res) => {
         if (!response.ok) {
           console.error("❌ Mailjet API error:", result);
           return res.status(500).json({ error: "Failed to send OTP via Mailjet." });
+        }
+
+        const msgResult = result.Messages?.[0] || {};
+        if (msgResult.Status !== "success") {
+          console.error("❌ Mailjet message delivery failed:", JSON.stringify(msgResult, null, 2));
+          return res.status(500).json({ error: "Failed to deliver OTP via Mailjet." });
         }
 
         console.log(`✅ OTP sent to ${email}: ${generatedOtp}`);

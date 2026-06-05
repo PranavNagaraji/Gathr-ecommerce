@@ -64,7 +64,152 @@ async function getOrderById(orderId) {
 }
 
 // Payment Controllers
+// Helper to create the Supabase Order after successful payment
+async function createOrderAfterPayment({ clerkId, addressId, cartId, razorpayOrderId, razorpayPaymentId }) {
+  // 1. Check if order already exists with this razorpayOrderId (idempotency check)
+  const { data: existingOrder } = await supabase
+    .from("Orders")
+    .select("id")
+    .eq("razorpay_order_id", razorpayOrderId)
+    .maybeSingle();
+
+  if (existingOrder) {
+    console.log("Order already exists for Razorpay Order ID:", razorpayOrderId);
+    await supabase
+      .from("Orders")
+      .update({
+        payment_status: "paid",
+        razorpay_payment_id: razorpayPaymentId
+      })
+      .eq("id", existingOrder.id);
+    return existingOrder;
+  }
+
+  // 2. Fetch user
+  const user = await getUserByClerkId(clerkId);
+  if (!user) throw new Error("User not found");
+
+  // 3. Fetch Cart and Cart items
+  const { data: cartItems, error: itemsError } = await supabase
+    .from("Cart_items")
+    .select("*, Items(*)")
+    .eq("cart_id", cartId)
+    .is("order_id", null);
+
+  if (itemsError || !cartItems || cartItems.length === 0) {
+    throw new Error("Cart items not found or already processed");
+  }
+
+  const shopId = cartItems[0].Items?.shop_id;
+  const subtotal = cartItems.reduce((sum, item) => sum + (item.Items?.price || 0) * item.quantity, 0);
+
+  // 4. Fetch address
+  const { data: address } = await supabase
+    .from("Addresses")
+    .select("*")
+    .eq("id", addressId)
+    .single();
+
+  if (!address) throw new Error("Address not found");
+
+  // 5. Fetch shop
+  const { data: shop } = await supabase
+    .from("Shops")
+    .select("id, Location")
+    .eq("id", shopId)
+    .single();
+
+  if (!shop) throw new Error("Shop not found");
+
+  // 6. Calculate distance and fees
+  const toRad = (v) => (v * Math.PI) / 180;
+  const getDistanceKm = (lat1, lon1, lat2, lon2) => {
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  };
+
+  const shopLat = shop?.Location?.latitude ?? shop?.Location?.lat;
+  const shopLong = shop?.Location?.longitude ?? shop?.Location?.long;
+  const destLat = address?.location?.lat ?? address?.location?.latitude;
+  const destLong = address?.location?.long ?? address?.location?.longitude;
+
+  let distanceKm = 0;
+  if ([shopLat, shopLong, destLat, destLong].every(v => v != null)) {
+    distanceKm = getDistanceKm(Number(shopLat), Number(shopLong), Number(destLat), Number(destLong));
+  }
+
+  const GST_RATE = parseFloat(process.env.GST_RATE || '0.18');
+  const DELIVERY_BASE_KM = parseFloat(process.env.DELIVERY_BASE_KM || '2');
+  const DELIVERY_BASE_FEE = parseFloat(process.env.DELIVERY_BASE_FEE || '30');
+  const DELIVERY_PER_KM_FEE = parseFloat(process.env.DELIVERY_PER_KM_FEE || '10');
+
+  const extraKm = Math.max(0, distanceKm - DELIVERY_BASE_KM);
+  const deliveryFee = DELIVERY_BASE_FEE + Math.ceil(extraKm) * DELIVERY_PER_KM_FEE;
+  const gst = subtotal * GST_RATE;
+  const totalAmount = subtotal + gst + deliveryFee;
+
+  // 7. Insert Order
+  const { data: order, error: orderError } = await supabase
+    .from("Orders")
+    .insert({
+      customer_id: user.id,
+      shop_id: shopId,
+      cart_id: cartId,
+      address_id: addressId,
+      amount_paid: totalAmount,
+      payment_status: "paid",
+      payment_method: "razorpay",
+      razorpay_order_id: razorpayOrderId,
+      razorpay_payment_id: razorpayPaymentId
+    })
+    .select()
+    .single();
+
+  if (orderError) throw orderError;
+
+  // 8. Associate cart items with order
+  await supabase
+    .from("Cart_items")
+    .update({ order_id: order.id })
+    .eq("cart_id", cartId)
+    .is("order_id", null);
+
+  // 9. Update sold quantities
+  await Promise.all(
+    cartItems.map(async ({ item_id, quantity }) => {
+      const { data: item } = await supabase
+        .from("Items")
+        .select("sold_qt")
+        .eq("id", item_id)
+        .single();
+      const currentSold = item?.sold_qt || 0;
+      return supabase
+        .from("Items")
+        .update({ sold_qt: currentSold + quantity })
+        .eq("id", item_id);
+    })
+  );
+
+  // 10. Deactivate Cart
+  await supabase
+    .from("Cart")
+    .update({ status: "inactive" })
+    .eq("id", cartId);
+
+  return order;
+}
+
+// Payment Controllers
 async function createOrderFromCartHandler(req, res) {
+  // Legacy stub, no longer needed but kept to prevent routing issues
+  return res.status(410).json({ error: "Deprecated endpoint. Use /create-checkout-session directly." });
+}
+
+async function createRazorpayOrderHandler(req, res) {
   try {
     const { clerkId, addressId } = req.body;
 
@@ -161,89 +306,26 @@ async function createOrderFromCartHandler(req, res) {
     const gst = subtotal * GST_RATE;
     const totalAmount = subtotal + gst + deliveryFee;
 
-    const { data: order, error: orderError } = await supabase
-      .from("Orders")
-      .insert({
-        customer_id: user.id,
-        shop_id: shopId,
-        cart_id: cart.id,
-        address_id: addressId,
-        amount_paid: totalAmount,
-        payment_status: "pending",
-        payment_method: "razorpay"
-      })
-      .select()
-      .single();
-
-    if (orderError) {
-      return res.status(500).json({ error: "Failed to create order" });
-    }
-
-    await supabase
-      .from("Cart_items")
-      .update({ order_id: order.id })
-      .eq("cart_id", cart.id)
-      .is("order_id", null);
-
-    await supabase
-      .from("Cart")
-      .update({ status: "completed" })
-      .eq("id", cart.id);
-
-    return res.json({ order });
-  } catch (error) {
-    console.error("Error creating order from cart:", error);
-    return res.status(500).json({ error: "Internal error" });
-  }
-}
-
-async function createRazorpayOrderHandler(req, res) {
-  try {
-    const { orderId, clerkId } = req.body;
-
-    if (!orderId || !clerkId) {
-      return res.status(400).json({ error: "orderId and clerkId are required" });
-    }
-
-    const user = await getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    const order = await getOrderById(orderId);
-    if (!order) {
-      return res.status(404).json({ error: "Order not found" });
-    }
-
-    if (order.customer_id !== user.id) {
-      return res.status(403).json({ error: "Access denied" });
-    }
-
     const options = {
-      amount: Math.round(order.amount_paid * 100), // in paise
+      amount: Math.round(totalAmount * 100), // in paise
       currency: "INR",
-      receipt: `receipt_order_${order.id}`,
+      receipt: `receipt_cart_${cart.id}`,
+      notes: {
+        clerkId: clerkId,
+        addressId: String(addressId),
+        cartId: String(cart.id)
+      }
     };
 
     const razorpayOrder = await razorpay.orders.create(options);
-
-    // Update order with Razorpay order ID
-    await supabase
-      .from("Orders")
-      .update({
-        razorpay_order_id: razorpayOrder.id,
-        payment_status: "pending"
-      })
-      .eq("id", orderId);
 
     return res.json({
       key: process.env.RAZORPAY_KEY_ID,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
       name: "Gathr",
-      description: `Payment for Order #${order.id}`,
-      order_id: razorpayOrder.id,
-      orderDbId: order.id
+      description: `Payment for Cart #${cart.id}`,
+      order_id: razorpayOrder.id
     });
   } catch (error) {
     console.error("Error creating Razorpay order:", error);
@@ -253,15 +335,10 @@ async function createRazorpayOrderHandler(req, res) {
 
 async function verifyPaymentHandler(req, res) {
   try {
-    const { razorpay_payment_id, razorpay_order_id, razorpay_signature, clerkId } = req.body;
+    const { razorpay_payment_id, razorpay_order_id, razorpay_signature, clerkId, addressId, cartId } = req.body;
 
     if (!razorpay_payment_id || !razorpay_order_id || !razorpay_signature || !clerkId) {
       return res.status(400).json({ error: "Missing required validation parameters" });
-    }
-
-    const user = await getUserByClerkId(clerkId);
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
     }
 
     // Verify signature
@@ -273,25 +350,25 @@ async function verifyPaymentHandler(req, res) {
       return res.status(400).json({ success: false, error: "Signature verification failed" });
     }
 
-    // Get order and update details
-    const { data: order, error: fetchErr } = await supabase
-      .from("Orders")
-      .select("*")
-      .eq("razorpay_order_id", razorpay_order_id)
-      .single();
+    // Resolve notes metadata if missing from request body
+    let resolvedClerkId = clerkId;
+    let resolvedAddressId = addressId;
+    let resolvedCartId = cartId;
 
-    if (fetchErr || !order) {
-      return res.status(404).json({ error: "Order not found" });
+    if (!resolvedAddressId || !resolvedCartId) {
+      const rzpOrder = await razorpay.orders.fetch(razorpay_order_id);
+      resolvedClerkId = rzpOrder.notes?.clerkId || clerkId;
+      resolvedAddressId = rzpOrder.notes?.addressId;
+      resolvedCartId = rzpOrder.notes?.cartId;
     }
 
-    await supabase
-      .from("Orders")
-      .update({
-        payment_status: "paid",
-        amount_paid: order.amount_paid,
-        razorpay_payment_id: razorpay_payment_id
-      })
-      .eq("id", order.id);
+    const order = await createOrderAfterPayment({
+      clerkId: resolvedClerkId,
+      addressId: resolvedAddressId,
+      cartId: resolvedCartId,
+      razorpayOrderId: razorpay_order_id,
+      razorpayPaymentId: razorpay_payment_id
+    });
 
     return res.json({ success: true, orderId: order.id });
   } catch (error) {
@@ -364,13 +441,19 @@ async function handleWebhook(req, res) {
       const paymentPayload = event.payload.payment.entity;
       const orderPayload = event.payload.order.entity;
 
-      await supabase
-        .from("Orders")
-        .update({
-          payment_status: "paid",
-          razorpay_payment_id: paymentPayload.id
-        })
-        .eq("razorpay_order_id", orderPayload.id);
+      const clerkId = orderPayload.notes?.clerkId;
+      const addressId = orderPayload.notes?.addressId;
+      const cartId = orderPayload.notes?.cartId;
+
+      if (clerkId && addressId && cartId) {
+        await createOrderAfterPayment({
+          clerkId,
+          addressId,
+          cartId,
+          razorpayOrderId: orderPayload.id,
+          razorpayPaymentId: paymentPayload.id
+        });
+      }
     }
 
     return res.json({ received: true });

@@ -318,7 +318,7 @@ export default function AddressMapPicker({
         )}
         {L && (
           <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-[1000] bg-black/70 text-white text-xs px-3 py-1.5 rounded-full pointer-events-none whitespace-nowrap backdrop-blur-sm">
-            📍 Click map or drag pin to set location
+           Click map or drag pin to set location
           </div>
         )}
       </div>

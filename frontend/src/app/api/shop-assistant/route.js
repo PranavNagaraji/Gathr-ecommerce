@@ -116,7 +116,7 @@ export async function POST(req) {
 
       if (shop.name) reply += `🏪 Our shop name is **${shop.name}**.\n`;
       if (shop.address)
-        reply += `📍 We are located at **${shop.address}**.\n`;
+        reply += `We are located at **${shop.address}**.\n`;
       if (shop.Location)
         reply += `🗺️ Find us here: [Google Maps](https://www.google.com/maps?q=${encodeURIComponent(
           shop.Location
