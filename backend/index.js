@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import 'dotenv/config'; // Reload: sender email updated to gmail
 import express from "express";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";

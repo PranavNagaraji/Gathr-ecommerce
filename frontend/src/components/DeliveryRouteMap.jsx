@@ -29,8 +29,22 @@ export default function DeliveryRouteMap({
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState('');
   const [otpSent, setOtpSent] = useState(false);
+  const [resendCountdown, setResendCountdown] = useState(30);
   // Live carrier location after pickup
   const [liveCarrier, setLiveCarrier] = useState(null);
+
+  useEffect(() => {
+    let timer;
+    if (showOtpModal && otpSent && resendCountdown > 0) {
+      timer = setInterval(() => {
+        setResendCountdown((prev) => prev - 1);
+      }, 1000);
+    }
+    return () => {
+      if (timer) clearInterval(timer);
+    };
+  }, [showOtpModal, otpSent, resendCountdown]);
+
   // Freeze the pre-pickup route origin to initial carrier location
   const initialCarrierRef = useRef(null);
 
@@ -128,6 +142,7 @@ export default function DeliveryRouteMap({
         }
       });
       setOtpSent(true);
+      setResendCountdown(30);
     } catch (err) {
       console.error(err);
       alert('Failed to send OTP');
@@ -345,6 +360,9 @@ export default function DeliveryRouteMap({
         <button
           className="px-4 py-2 rounded mt-2 bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
           onClick={() => {
+            setOtp('');
+            setOtpSent(false);
+            setResendCountdown(30);
             setShowOtpModal(true);
             sendOtp(selectedOrder?.Users?.email);
           }}
@@ -382,16 +400,30 @@ export default function DeliveryRouteMap({
                 <div className="flex gap-2 justify-center">
                   <button
                     onClick={() => verifyOtp(selectedOrder?.Users?.email)}
-                    className="px-4 py-2 rounded bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
+                    className="px-4 py-2 rounded bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 font-semibold"
                   >
                     Verify
                   </button>
                   <button
                     onClick={() => setShowOtpModal(false)}
-                    className="px-4 py-2 rounded bg-[var(--muted)] text-[var(--muted-foreground)] hover:opacity-90"
+                    className="px-4 py-2 rounded bg-[var(--muted)] text-[var(--muted-foreground)] hover:opacity-90 font-semibold"
                   >
                     Cancel
                   </button>
+                </div>
+                <div className="text-center mt-4">
+                  {resendCountdown > 0 ? (
+                    <p className="text-xs text-[var(--muted-foreground)]">
+                      Resend OTP in {resendCountdown}s
+                    </p>
+                  ) : (
+                    <button
+                      onClick={() => sendOtp(selectedOrder?.Users?.email)}
+                      className="text-xs text-[var(--primary)] hover:underline font-semibold"
+                    >
+                      Resend OTP
+                    </button>
+                  )}
                 </div>
               </>
             )}
