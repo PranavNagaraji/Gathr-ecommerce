@@ -684,7 +684,7 @@ const ItemDetailsContent = () => {
             <AnimatePresence>
               {comments.length > 0 ? (
                 comments.map((c, idx) => (
-                  <motion.div key={c.id || idx} variants={itemVariants} exit={{ opacity: 0, x: -50 }} className="bg-[var(--card)] text-[var(--card-foreground)] p-5 rounded-2xl shadow-sm border border-[var(--border)] relative">
+                  <motion.div key={c.id ? `comment-${c.id}` : `comment-idx-${idx}`} variants={itemVariants} exit={{ opacity: 0, x: -50 }} className="bg-[var(--card)] text-[var(--card-foreground)] p-5 rounded-2xl shadow-sm border border-[var(--border)] relative">
                     <div className="flex items-center justify-between mb-3">
                       <div className="flex items-center gap-4">
                         <Avatar>

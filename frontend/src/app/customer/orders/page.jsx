@@ -139,7 +139,7 @@ const Orders = () => {
           {orders.map((order) => (
             <motion.div
               role="listitem"
-              key={order.cart_id}
+              key={order.id}
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 12 }}

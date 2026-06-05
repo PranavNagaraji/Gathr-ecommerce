@@ -740,7 +740,7 @@ export default function CustomerDashboard() {
         ) : (
           <motion.div initial="hidden" animate="show" variants={gridVariants} className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
             {orders.map((order) => (
-              <motion.div key={order.cart_id} variants={cardVariants} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 hover:shadow-sm transition">
+              <motion.div key={order.id} variants={cardVariants} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 hover:shadow-sm transition">
                 <Link href={`/customer/orders/${order.cart_id}`} className="block">
                   <div className="flex items-start justify-between gap-3">
                     <div>
