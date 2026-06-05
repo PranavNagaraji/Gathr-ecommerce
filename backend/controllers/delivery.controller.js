@@ -510,4 +510,53 @@ export const getAllOrders = async (req,res)=>{
             return res.status(403).json({ error });
         }
         return res.status(200).json({ ShopsAndAddresses: acceptedOrders });
-} 
+}
+
+export const getPendingDeliveries = async (req, res) => {
+    try {
+        const { clerkId } = req.body;
+        if (!clerkId) {
+            return res.status(400).json({ message: "Missing clerkId" });
+        }
+        const { data: user, error: userError } = await supabase
+            .from("Users")
+            .select("id, role")
+            .eq("clerk_id", clerkId)
+            .single();
+        if (userError || !user) {
+            return res.status(404).json({ message: "User not found" });
+        }
+        if (user.role !== "carrier") {
+            return res
+                .status(403)
+                .json({ message: "Unauthorized: Only carriers can view nearby deliveries" });
+        }
+        try {
+            const cu = await clerk.users.getUser(clerkId);
+            if (cu?.publicMetadata?.carrier_banned) {
+                return res.status(403).json({ message: "Carrier access is banned" });
+            }
+        } catch {}
+
+        // Fetch active orders that do not have an assigned carrier yet
+        const { data: orders, error } = await supabase
+            .from("Orders")
+            .select(`
+                *,
+                Addresses(*),
+                Shops(*),
+                Cart(*, Cart_items(*, Items(*)))
+            `)
+            .in('status', ['Ordered', 'Placed', 'placed', 'accepted', 'Accepted', 'pending', 'Pending'])
+            .is('carrier_id', null);
+
+        if (error) {
+            return res.status(500).json({ error: error.message });
+        }
+
+        return res.status(200).json({ orders });
+    } catch (err) {
+        console.error("Unexpected error:", err);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};
