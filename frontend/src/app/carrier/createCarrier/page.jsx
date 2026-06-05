@@ -104,21 +104,21 @@ export default function CreateCarrier() {
       if (process.env.NODE_ENV === 'development') {
         if (form.otp === '123456') {
           setForm({ ...form, isVerified: true });
-          toast.success('Phone verified ✅ (dev test number)');
+          toast.success('Phone verified (dev test number)');
           return;
         } else {
-          toast.error('Invalid OTP ❌');
+          toast.error('Invalid OTP');
           return;
         }
       }
       if (confirmationResult) {
         await confirmationResult.confirm(form.otp);
         setForm({ ...form, isVerified: true });
-        toast.success('Phone verified ✅');
+        toast.success('Phone verified');
       }
     } catch (err) {
       console.error(err);
-      toast.error('Invalid OTP ❌');
+      toast.error('Invalid OTP');
     }
   };
 
@@ -331,7 +331,7 @@ export default function CreateCarrier() {
                 disabled={fetchingLocation}
                 className="w-full py-2.5 rounded-xl border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm"
               >
-                {fetchingLocation ? "⏳ Fetching Location..." : "📍 Use Current Location"}
+                {fetchingLocation ? "Fetching Location..." : "Use Current Location"}
               </button>
               <AddressMapPicker
                 value={{

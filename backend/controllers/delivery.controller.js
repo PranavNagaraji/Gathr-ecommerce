@@ -177,15 +177,28 @@ export const updateCarrierLocation = async (req, res) => {
 }
 
 export const getCarrier = async (req, res) => {
-    const { carrierId } = req.params;
-    const { data, error } = await supabase
-        .from('Users')
-        .select('*')
-        .eq('clerk_id', carrierId)
-        .single();
-    
-    if(error) return res.status(500).json({ message: "Error fetching carrier", error });
-    res.status(200).json({carrier:data});
+    try {
+        const { carrierId } = req.params;
+        const { data: user, error: userError } = await supabase
+            .from('Users')
+            .select('*')
+            .eq('clerk_id', carrierId)
+            .single();
+        
+        if (userError || !user) {
+            return res.status(404).json({ message: "Carrier not found", error: userError });
+        }
+
+        const { data: addressData } = await supabase
+            .from('Addresses')
+            .select('*')
+            .eq('user_id', user.id)
+            .maybeSingle();
+
+        res.status(200).json({ carrier: user, address: addressData });
+    } catch (err) {
+        return res.status(500).json({ message: "Error fetching carrier", error: err.message });
+    }
 }
 
 export const createCarrier = async (req,res) => {

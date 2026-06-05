@@ -288,7 +288,7 @@ export default function AddressManager() {
                   disabled={fetchingLocation}
                   className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1 font-semibold disabled:opacity-50"
                 >
-                  {fetchingLocation ? "⏳ Locating..." : "📍 Use Current Location"}
+                  {fetchingLocation ? "Locating..." : "Use Current Location"}
                 </button>
               </div>
               {mapLoaded ? (

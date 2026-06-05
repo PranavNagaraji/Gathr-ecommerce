@@ -1,12 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Image from 'next/image';
 import { Button, TextField, Typography, Box, Paper } from '@mui/material';
 import axios from 'axios';
 import { useUser, useAuth } from '@clerk/nextjs';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-hot-toast';
+import AddressMapPicker from '@/components/shared/AddressMapPicker';
 
 export default function UpdateCarrier() {
     const { user } = useUser();
@@ -19,10 +19,11 @@ export default function UpdateCarrier() {
         licenseNumber: '',
         aadharNumber: '',
         bankAccount: '',
-        profilePic: null,
+        address: '',
+        location: { latitude: 17.385044, longitude: 78.486671 }, // Hyderabad default
     });
     const [bankAccountError, setBankAccountError] = useState('');
-    const [preview, setPreview] = useState(null);
+    const [fetchingLocation, setFetchingLocation] = useState(false);
 
     // Fetch carrier info on mount
     useEffect(() => {
@@ -33,16 +34,18 @@ export default function UpdateCarrier() {
                 const res = await axios.get(`${API_URL}/api/delivery/getCarrier/${user.id}`, {
                     headers: { Authorization: `Bearer ${token}` },
                 });
-                const data = res.data.carrier.delivery_details || {};
+                const data = res.data.carrier?.delivery_details || {};
+                const addressData = res.data.address || {};
                 setForm({
                     phone: data.phone || '',
                     licenseNumber: data.licenseNumber || '',
                     aadharNumber: data.aadharNumber || '',
                     bankAccount: data.bankAccount || '',
-                    profilePic: data.profile || null,
+                    address: addressData.address || '',
+                    location: addressData.location
+                        ? { latitude: addressData.location.lat, longitude: addressData.location.long }
+                        : { latitude: 17.385044, longitude: 78.486671 },
                 });
-                console.log(res.data.carrier.delivery_details);
-                setPreview(data.profile?.url || null);
             } catch (error) {
                 console.error('Error fetching carrier:', error);
             }
@@ -55,41 +58,70 @@ export default function UpdateCarrier() {
         setForm((prev) => ({ ...prev, [name]: value }));
     };
 
-    const handleImage = (e) => {
-        const file = e.target.files[0];
-        if (file) {
-            setForm((prev) => ({ ...prev, profilePic: file }));
-            setPreview(URL.createObjectURL(file));
+    const handleFetchCurrentLocation = () => {
+        if (!navigator.geolocation) {
+            toast.error("Geolocation is not supported by your browser.");
+            return;
         }
+        setFetchingLocation(true);
+        navigator.geolocation.getCurrentPosition(
+            (position) => {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                
+                if (window.google && window.google.maps) {
+                    const geocoder = new window.google.maps.Geocoder();
+                    geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+                        setFetchingLocation(false);
+                        if (status === "OK" && results[0]) {
+                            setForm((prev) => ({
+                                ...prev,
+                                address: results[0].formatted_address,
+                                location: { latitude: lat, longitude: lng },
+                            }));
+                        } else {
+                            setForm((prev) => ({
+                                ...prev,
+                                address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                                location: { latitude: lat, longitude: lng },
+                            }));
+                        }
+                    });
+                } else {
+                    setFetchingLocation(false);
+                    setForm((prev) => ({
+                        ...prev,
+                        address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+                        location: { latitude: lat, longitude: lng },
+                    }));
+                }
+            },
+            (error) => {
+                setFetchingLocation(false);
+                toast.error("Failed to retrieve your location: " + error.message);
+            },
+            { timeout: 8000 }
+        );
     };
-
-    const toBase64 = (file) =>
-        new Promise((resolve, reject) => {
-            const reader = new FileReader();
-            reader.readAsDataURL(file);
-            reader.onload = () => resolve(reader.result);
-            reader.onerror = reject;
-        });
 
     const handleSubmit = async (e) => {
         e.preventDefault();
 
         // Validate bank account
         if (!/^\d{9,18}$/.test((form.bankAccount || '').trim())) {
-            setBankAccountError('Bank account number must be 9\u201318 digits.');
+            setBankAccountError('Bank account number must be 9-18 digits.');
             return;
         }
         setBankAccountError('');
 
-        let imageData = form.profilePic;
-        if (form.profilePic && typeof form.profilePic !== 'string' && !form.profilePic.url) {
-            imageData = await toBase64(form.profilePic);
+        if (!form.address) {
+            toast.error('Please select your address on the map!');
+            return;
         }
 
         const carrierData = {
             licenseNumber: form.licenseNumber,
             bankAccount: form.bankAccount,
-            profile: imageData,
             phone: form.phone,
             aadharNumber: form.aadharNumber,
         };
@@ -98,7 +130,12 @@ export default function UpdateCarrier() {
             const token = await getToken();
             await axios.post(
                 `${API_URL}/api/delivery/updateCarrier`,
-                { carrierData, clerkId: user.id, profile: imageData },
+                {
+                    carrierData,
+                    clerkId: user.id,
+                    address: form.address,
+                    location: form.location,
+                },
                 { headers: { Authorization: `Bearer ${token}` } }
             );
             toast.success('Carrier updated successfully!');
@@ -195,30 +232,33 @@ export default function UpdateCarrier() {
                         </Button>
                     </form>
 
-                    {/* RIGHT: Image */}
-                    <div className="md:col-span-2 md:order-last md:sticky md:top-8 h-fit">
-                        <Typography variant="subtitle2" sx={{ color: 'var(--muted-foreground)', fontWeight: 600, mb: 1 }}>Profile Picture</Typography>
-                        <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
-                            <div className="relative aspect-square w-full">
-                                {preview ? (
-                                    <Image src={preview} alt="Profile Preview" fill style={{ objectFit: 'cover' }} />
-                                ) : (
-                                    <div className="w-full h-full flex items-center justify-center text-sm text-[var(--muted-foreground)]">No image</div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="mt-4 flex gap-3">
-                            {preview && (
-                                <Button onClick={() => { setForm(prev => ({ ...prev, profilePic: null })); setPreview(null); }} variant="contained" sx={{ bgcolor: '#dc2626', '&:hover': { bgcolor: '#b91c1c' } }}>
-                                    Delete
-                                </Button>
-                            )}
-                            <Button variant="contained" component="label" sx={{ bgcolor: 'var(--muted)', color: 'var(--muted-foreground)', '&:hover': { bgcolor: 'var(--accent)', color: 'var(--accent-foreground)' } }}>
-                                Replace Image
-                                <input type="file" hidden accept="image/*" onChange={handleImage} />
-                            </Button>
-                        </div>
+                    {/* RIGHT: Address */}
+                    <div className="md:col-span-2 md:sticky md:top-8 h-fit flex flex-col gap-3">
+                        <button
+                            type="button"
+                            onClick={handleFetchCurrentLocation}
+                            disabled={fetchingLocation}
+                            className="w-full py-2.5 rounded-xl border border-[var(--border)] bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] font-semibold flex items-center justify-center gap-2 transition-colors disabled:opacity-50 text-sm"
+                        >
+                            {fetchingLocation ? "Fetching Location..." : "Use Current Location"}
+                        </button>
+                        <AddressMapPicker
+                            value={{
+                                lat: form.location.latitude,
+                                lng: form.location.longitude,
+                                address: form.address,
+                            }}
+                            onChange={({ lat, lng, address }) =>
+                                setForm(prev => ({
+                                    ...prev,
+                                    address,
+                                    location: { latitude: lat, longitude: lng },
+                                }))
+                            }
+                            label="CARRIER ADDRESS"
+                            markerPopupText="Your Location"
+                            mapHeight="calc(100vh - 24rem)"
+                        />
                     </div>
                 </div>
             </Paper>
