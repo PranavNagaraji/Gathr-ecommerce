@@ -37,6 +37,43 @@ export default function EditItemPage() {
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  const [isDuplicateTitle, setIsDuplicateTitle] = useState(false);
+
+  useEffect(() => {
+    const trimmedTitle = formData.name.trim();
+    if (!trimmedTitle) {
+      setIsDuplicateTitle(false);
+      return;
+    }
+
+    const handler = setTimeout(async () => {
+      if (!user || !isLoaded || !isSignedIn) return;
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_URL}/api/merchant/check_duplicate_title`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({
+            title: trimmedTitle,
+            owner_id: user.id,
+            excludeId: item_id
+          })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setIsDuplicateTitle(data.exists);
+        }
+      } catch (err) {
+        console.error("Error checking duplicate title:", err);
+      }
+    }, 400);
+
+    return () => clearTimeout(handler);
+  }, [formData.name, user, isLoaded, isSignedIn, item_id, API_URL, getToken]);
   // 🔹 State for the "Other" category input
   const [otherCategory, setOtherCategory] = useState("")
   // 🔹 Carousel state
@@ -108,6 +145,9 @@ export default function EditItemPage() {
   const handleChange = (e) => {
     const { name, value } = e.target
     setFormData((prev) => ({ ...prev, [name]: value }))
+    if (name === "name") {
+      setIsDuplicateTitle(false);
+    }
   }
 
   // 🔹 NEW: Handler for AntD Select
@@ -185,6 +225,28 @@ export default function EditItemPage() {
   }
 
   // ... (handleSubmit logic is unchanged) ...
+  const friendlyItemError = (data) => {
+    const msg = typeof data?.error?.message === 'string' ? data.error.message : '';
+    const code = data?.error?.code || '';
+    if (code === '23502') {
+      const col = msg.match(/column "(\w+)"/)?.[1];
+      const fieldMap = { quantity: 'Quantity', price: 'Price', name: 'Item Name', description: 'Description', category: 'Category' };
+      const field = fieldMap[col] || col || 'a required field';
+      return `Please fill in the "${field}" field — it cannot be left empty.`;
+    }
+    if (code === '23505') {
+      return 'An item with this name already exists in your shop. Please choose a different name.';
+    }
+    if (code === '22P02') {
+      return 'One of the fields has an invalid value (for example, quantity or price must be a number). Please check your inputs and try again.';
+    }
+    if (code === '23503') {
+      return 'Something went wrong with the shop link. Please refresh the page and try again.';
+    }
+    if (data?.message) return data.message;
+    return 'Something went wrong while updating the item. Please try again.';
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault()
     if (!user || !isLoaded || !isSignedIn) return
@@ -207,11 +269,12 @@ export default function EditItemPage() {
         await showNotificationModal("Item updated successfully!")
         router.push("/merchant/dashboard")
       } else {
-        await showNotificationModal(res.data.message || "Error updating item")
+        await showNotificationModal(friendlyItemError(res.data))
       }
     } catch (err) {
       console.error("Error updating item:", err)
-      await showNotificationModal("Failed to update item.")
+      const data = err.response?.data
+      await showNotificationModal(friendlyItemError(data || {}))
     } finally {
       setSaving(false)
     }
@@ -283,9 +346,9 @@ export default function EditItemPage() {
       </div>
       {notifModal.open && (
         <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-          <div className="w-[90vw] max-w-md rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
+          <div className="w-[90vw] max-w-lg rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
             <div className="p-4 border-b border-[var(--border)] font-semibold">Notice</div>
-            <div className="p-5 text-sm">{notifModal.message}</div>
+            <div className="p-5 text-sm leading-relaxed">{notifModal.message}</div>
             <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
               <button type="button" onClick={()=>{ const r = notifModal.resolve; setNotifModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">OK</button>
             </div>
@@ -390,6 +453,11 @@ export default function EditItemPage() {
               <div>
                 <label className="text-sm font-medium text-[var(--muted-foreground)]">Item Name</label>
                 <input type="text" name="name" value={formData.name} onChange={handleChange} className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors" placeholder="Enter item name" />
+                {isDuplicateTitle && (
+                  <p className="text-amber-500 text-sm mt-1 animate-pulse">
+                    ⚠️ A product with this title already exists.
+                  </p>
+                )}
               </div>
               <div>
                 <label className="text-sm font-medium text-[var(--muted-foreground)]">Description</label>
@@ -422,9 +490,9 @@ export default function EditItemPage() {
       </div>
       {notifModal.open && (
         <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-          <div className="w-[90vw] max-w-md rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
+          <div className="w-[90vw] max-w-lg rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
             <div className="p-4 border-b border-[var(--border)] font-semibold">Notice</div>
-            <div className="p-5 text-sm">{notifModal.message}</div>
+            <div className="p-5 text-sm leading-relaxed">{notifModal.message}</div>
             <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
               <button type="button" onClick={()=>{ const r = notifModal.resolve; setNotifModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">OK</button>
             </div>

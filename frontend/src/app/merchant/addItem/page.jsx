@@ -27,6 +27,41 @@ export default function addItemPage() {
         category: [],
         images: [],
     });
+    const [isDuplicateTitle, setIsDuplicateTitle] = useState(false);
+
+    useEffect(() => {
+        const trimmedTitle = formData.name.trim();
+        if (!trimmedTitle) {
+            setIsDuplicateTitle(false);
+            return;
+        }
+
+        const handler = setTimeout(async () => {
+            if (!user || !isLoaded || !isSignedIn) return;
+            try {
+                const token = await getToken();
+                const res = await fetch(`${API_URL}/api/merchant/check_duplicate_title`, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({
+                        title: trimmedTitle,
+                        owner_id: user.id
+                    })
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    setIsDuplicateTitle(data.exists);
+                }
+            } catch (err) {
+                console.error("Error checking duplicate title:", err);
+            }
+        }, 400);
+
+        return () => clearTimeout(handler);
+    }, [formData.name, user, isLoaded, isSignedIn, API_URL, getToken]);
 
     const cropMarginsBase64 = (base64, marginPct = 0.08) => new Promise((resolve) => {
         const img = new Image();
@@ -193,6 +228,9 @@ export default function addItemPage() {
     const handleChange = (e) => {
         const { name, value } = e.target;
         setFormData(prev => ({ ...prev, [name]: value }));
+        if (name === "name") {
+            setIsDuplicateTitle(false);
+        }
     };
 
     const [barcodeManual, setBarcodeManual] = useState('');
@@ -668,6 +706,34 @@ export default function addItemPage() {
         }
     }
 
+    const friendlyItemError = (data) => {
+        const msg = typeof data?.error?.message === 'string' ? data.error.message : '';
+        const code = data?.error?.code || '';
+        const details = typeof data?.error?.details === 'string' ? data.error.details : '';
+        // Not-null constraint violations
+        if (code === '23502') {
+            const col = msg.match(/column "(\w+)"/)?.[1];
+            const fieldMap = { quantity: 'Quantity', price: 'Price', name: 'Item Name', description: 'Description', category: 'Category' };
+            const field = fieldMap[col] || col || 'a required field';
+            return `Please fill in the "${field}" field — it cannot be left empty.`;
+        }
+        // Unique constraint violation
+        if (code === '23505') {
+            return 'An item with this name already exists in your shop. Please choose a different name.';
+        }
+        // Invalid input (e.g. wrong type)
+        if (code === '22P02') {
+            return 'One of the fields has an invalid value (for example, quantity or price must be a number). Please check your inputs and try again.';
+        }
+        // Foreign key violation
+        if (code === '23503') {
+            return 'Something went wrong with the shop link. Please refresh the page and try again.';
+        }
+        // Fallback to server message
+        if (data?.message) return data.message;
+        return 'Something went wrong while saving the item. Please try again.';
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!isLoaded || !isSignedIn || !user) return;
@@ -689,9 +755,9 @@ export default function addItemPage() {
         if (res.ok) {
             await showNotificationModal("Item details saved!");
             router.push("/merchant/dashboard");
+        } else {
+            await showNotificationModal(friendlyItemError(data));
         }
-
-        else await showNotificationModal(`Error saving item details: ${data.message}`);
     };
 
     if (!mounted) {
@@ -784,6 +850,11 @@ export default function addItemPage() {
                                     placeholder="Enter item name"
                                     className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors"
                                 />
+                                {isDuplicateTitle && (
+                                    <p className="text-amber-500 text-sm mt-1 animate-pulse">
+                                        ⚠️ A product with this title already exists.
+                                    </p>
+                                )}
                             </div>
 
                             {/* advanced scan moved to top section */}
@@ -1147,9 +1218,9 @@ export default function addItemPage() {
             )}
             {notifModal.open && (
               <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-                <div className="w-[90vw] max-w-md rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
+                <div className="w-[90vw] max-w-lg rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
                   <div className="p-4 border-b border-[var(--border)] font-semibold">Notice</div>
-                  <div className="p-5 text-sm">{notifModal.message}</div>
+                  <div className="p-5 text-sm leading-relaxed">{notifModal.message}</div>
                   <div className="p-3 border-t border-[var(--border)] flex justify-end gap-2">
                     <button type="button" onClick={()=>{ const r = notifModal.resolve; setNotifModal({ open: false, message: '', resolve: null }); if (typeof r === 'function') r(true); }} className="px-3 py-1.5 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)]">OK</button>
                   </div>

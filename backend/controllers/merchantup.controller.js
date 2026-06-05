@@ -107,9 +107,12 @@ export const updateItem = async (req, res) => {
             .eq("owner_id", user.id)
             .single();
 
+        const parsedQuantity = (quantity === "" || quantity === undefined || quantity === null) ? null : (isNaN(parseInt(quantity, 10)) ? null : parseInt(quantity, 10));
+        const parsedPrice = (price === "" || price === undefined || price === null) ? null : (isNaN(parseFloat(price)) ? null : parseFloat(price));
+
         const { data: updatedItem, error: updateError } = await supabase
             .from("Items")
-            .update({ name, description, quantity, price, category })
+            .update({ name, description, quantity: parsedQuantity, price: parsedPrice, category })
             .eq('id', id)
             .eq('shop_id', shop_id.id)
             .select('images')

@@ -109,13 +109,16 @@ export const add_items = async (req, res) => {
       return res.status(404).json({ message: "Shop not found for this user" });
     }
 
+    const parsedQuantity = (quantity === "" || quantity === undefined || quantity === null) ? null : (isNaN(parseInt(quantity, 10)) ? null : parseInt(quantity, 10));
+    const parsedPrice = (price === "" || price === undefined || price === null) ? null : (isNaN(parseFloat(price)) ? null : parseFloat(price));
+
     const { data: newItem, error: itemError } = await supabase
       .from("Items")
       .insert({
         name,
         description,
-        quantity,
-        price,
+        quantity: parsedQuantity,
+        price: parsedPrice,
         images: [], 
         category,
         shop_id: shop.id
@@ -408,4 +411,58 @@ export const getItem = async (req, res) => {
     return res.status(500).json({ message: "Error fetching items", error });
   }
 };
+
+export const checkDuplicateTitle = async (req, res) => {
+  try {
+    const { title, owner_id, excludeId } = req.body;
+    if (!title || !owner_id) {
+      return res.status(400).json({ message: "Title and owner_id are required" });
+    }
+
+    const { data: user, error: userError } = await supabase
+      .from('Users')
+      .select('id, role')
+      .eq('clerk_id', owner_id)
+      .single();
+    
+    if (userError || !user) {
+      return res.status(404).json({ message: "User not found." });
+    }
+
+    if (user.role !== "merchant") {
+      return res.status(403).json({ message: "User is not a merchant." });
+    }
+
+    const { data: shop, error: shopError } = await supabase
+      .from("Shops")
+      .select("id")
+      .eq("owner_id", user.id)
+      .single();
+
+    if (shopError || !shop) {
+      return res.status(404).json({ message: "Shop not found for this user." });
+    }
+
+    let query = supabase
+      .from("Items")
+      .select("id")
+      .eq("shop_id", shop.id)
+      .eq("name", title.trim());
+
+    if (excludeId) {
+      query = query.neq("id", excludeId);
+    }
+
+    const { data: items, error } = await query;
+
+    if (error) throw error;
+
+    const exists = items && items.length > 0;
+    return res.status(200).json({ exists });
+  } catch (error) {
+    console.error("Error checking duplicate title:", error);
+    return res.status(500).json({ message: "Error checking duplicate title", error });
+  }
+};
+
 

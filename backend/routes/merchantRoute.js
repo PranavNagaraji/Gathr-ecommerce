@@ -1,6 +1,6 @@
 import express from "express";
 import requireAuth from "../utils/check.js";
-import { add_items, add_shop, getItems, checkShopExists, getShop, showOrders, updateorderStatus, getItem } from "../controllers/merchant.controller.js";
+import { add_items, add_shop, getItems, checkShopExists, getShop, showOrders, updateorderStatus, getItem, checkDuplicateTitle } from "../controllers/merchant.controller.js";
 import { updateItem, updateShop, deleteShop, deleteitem } from "../controllers/merchantup.controller.js";
 import { get_all_carts, getPendingCarts, updateOrderStatus, getBanStatus } from "../controllers/merchant3.controller.js";
 import { generateItemFromImage } from "../controllers/merchant_ai.controller.js";
@@ -17,6 +17,7 @@ router.post("/check_shop_exists", requireAuth, checkShopExists);
 router.post("/get_items", requireAuth, getItems);
 router.post('/get_item', requireAuth, getItem);
 router.post("/get_shop", requireAuth, getShop);
+router.post("/check_duplicate_title", requireAuth, checkDuplicateTitle);
 router.post("/show_orders", requireAuth, showOrders);
 
 // AI endpoints
