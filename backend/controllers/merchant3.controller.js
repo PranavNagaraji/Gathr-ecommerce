@@ -137,7 +137,11 @@ export const updateOrderStatus = async (req, res) => {
             return res.status(403).json({ message: "You are not authorized to update this order." });
         }
 
-        await supabase.from("Orders").update({ status: status }).eq("id", orderId);
+        const updateData = { status: status };
+        if (status === "delivered" && order.payment_method === "cod") {
+            updateData.payment_status = "paid";
+        }
+        await supabase.from("Orders").update(updateData).eq("id", orderId);
         return res.status(200).json({ message: "Order status updated successfully." });
     } catch (err) {
         return res.status(500).json({ message: "Internal server error", error: err.message });

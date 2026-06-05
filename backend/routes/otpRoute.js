@@ -2,6 +2,7 @@ import express from "express";
 import fetch from "node-fetch"; // use fetch for Mailjet API
 import requireAuth from "../utils/check.js";
 import dotenv from "dotenv";
+import supabase from "../db.js";
 dotenv.config();
 
 const router = express.Router();
@@ -82,6 +83,32 @@ router.post("/", requireAuth, async (req, res) => {
     }
     if (record.otp === otp) {
       otpStore.delete(email);
+      
+      const { orderId } = req.body;
+      if (orderId) {
+        try {
+          const { data: order, error: orderError } = await supabase
+            .from("Orders")
+            .select("payment_method")
+            .eq("id", orderId)
+            .single();
+            
+          if (!orderError && order) {
+            const updateData = { status: "delivered" };
+            if (order.payment_method === "cod") {
+              updateData.payment_status = "paid";
+            }
+            await supabase
+              .from("Orders")
+              .update(updateData)
+              .eq("id", orderId);
+            console.log(`✅ [OTP Route] Updated order #${orderId} status to delivered and payment_status to paid`);
+          }
+        } catch (dbErr) {
+          console.error("❌ Failed to update order status during OTP verification:", dbErr);
+        }
+      }
+
       return res.json({ verified: true, message: "OTP verified successfully" });
     }
 

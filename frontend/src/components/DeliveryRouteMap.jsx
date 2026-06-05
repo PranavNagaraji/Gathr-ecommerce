@@ -137,7 +137,7 @@ export default function DeliveryRouteMap({
   const verifyOtp = async (email) => {
     try {
       const token = await getToken();
-      const res = await axios.post(`${API_URL}/api/otp`, { email, otp },{headers:{
+      const res = await axios.post(`${API_URL}/api/otp`, { email, otp, orderId: selectedOrder?.id },{headers:{
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         }

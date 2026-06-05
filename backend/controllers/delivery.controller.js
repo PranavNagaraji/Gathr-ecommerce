@@ -379,7 +379,14 @@ export const completeDelivery = async (req, res) => {
             }
         } catch {}
 
-        await supabase.from("Orders").update({ status: "delivered" , payment_status: "paid" }).eq("id", orderId);
+        const { error: updateError } = await supabase
+          .from("Orders")
+          .update({ status: "delivered", payment_status: "paid" })
+          .eq("id", orderId);
+        if (updateError) {
+          console.error("❌ completeDelivery update failed:", updateError);
+          return res.status(500).json({ message: "Failed to update order status", error: updateError.message });
+        }
 
         const { data: order, error: orderErr } = await supabase
           .from("Orders")
