@@ -31,6 +31,7 @@ export default function RootLayout({ children }) {
         </head>
 
         <body>
+          <div id="clerk-captcha" />
           <UIProviders>
             <Navbar />
             {children}

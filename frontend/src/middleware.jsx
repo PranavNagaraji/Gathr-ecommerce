@@ -6,6 +6,7 @@ const isPublicRoute = createRouteMatcher([
   '/sign-in',
   '/sign-up',
   '/auth-callback',
+  '/sso-callback',
   '/payment-success',
   '/payment-cancelled',
   '/admin/:path',
@@ -29,13 +30,25 @@ export default clerkMiddleware(async (auth, req) => {
 
     // Redirect logged-in users away from sign-in/sign-up
     if (req.nextUrl.pathname === '/sign-in' || req.nextUrl.pathname === '/sign-up') {
-      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'customer' ? '/customer/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/';
-      return NextResponse.redirect(new URL(dest, req.url));
+      // Has a role → go to their dashboard
+      if (role) {
+        const dest =
+          role === 'merchant' ? '/merchant/dashboard' :
+          role === 'customer' ? '/customer/dashboard' :
+          role === 'carrier'  ? '/carrier/dashboard'  : '/';
+        return NextResponse.redirect(new URL(dest, req.url));
+      }
+      // No role yet: if hitting sign-in, push them to sign-up to pick a role
+      if (req.nextUrl.pathname === '/sign-in') {
+        return NextResponse.redirect(new URL('/sign-up', req.url));
+      }
+      // No role on /sign-up → let them through (they'll pick role on the form)
+      return;
     }
 
     // Send logged-in users hitting root to their dashboards
     if (req.nextUrl.pathname === '/') {
-      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'customer' ? '/customer/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/';
+      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'customer' ? '/customer/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/sign-up';
       return NextResponse.redirect(new URL(dest, req.url));
     }
 

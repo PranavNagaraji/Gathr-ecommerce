@@ -13,15 +13,12 @@ export default function CustomSignInPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [redirectingToSignUp, setRedirectingToSignUp] = useState(false);
   const router = useRouter();
 
   if (!isLoaded) {
     return null; // Or a loading spinner
   }
-
-  const logError = (err) => {
-    console.error("Full error object:", err);
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -36,20 +33,50 @@ export default function CustomSignInPage() {
 
       if (result.status === "complete") {
         await setActive({ session: result.createdSessionId });
-        router.push("/"); // Use router.push for client-side navigation
+        // Use window.location so the server middleware re-evaluates the session
+        window.location.href = "/";
+      } else if (result.status === "needs_second_factor") {
+        setError("Two-factor authentication required. Please check your authenticator app.");
       } else {
-        // Handle other statuses (e.g., MFA)
         console.log("Sign-in incomplete:", result);
-        if (result.status === "needs_second_factor") {
-           setError("Please check your email or authenticator for a code.");
-           // You would ideally redirect to a 2FA page here
-        }
+        setError("Sign-in could not be completed. Please try again.");
       }
     } catch (err) {
-      logError(err);
-      // Set a user-friendly error message
-      const errorMessage = err.errors?.[0]?.message || "Sign-in failed. Please try again.";
-      setError(errorMessage);
+      console.error("Full sign-in error:", err);
+
+      const clerkError = err.errors?.[0];
+      const code = clerkError?.code;
+
+      // Account does not exist → guide to sign-up
+      if (code === "form_identifier_not_found") {
+        setRedirectingToSignUp(true);
+        setError("No account found with this email.");
+        // Auto-redirect after 2.5 seconds so the user sees the message
+        setTimeout(() => {
+          router.push("/sign-up");
+        }, 2500);
+        return;
+      }
+
+      // Wrong password
+      if (code === "form_password_incorrect") {
+        setError("Incorrect password. Please try again.");
+        return;
+      }
+
+      // Too many attempts
+      if (code === "too_many_requests") {
+        setError("Too many login attempts. Please wait a moment and try again.");
+        return;
+      }
+
+      // Generic fallback — extract the most useful message from Clerk's error shape
+      const message =
+        clerkError?.longMessage ||
+        clerkError?.message ||
+        clerkError?.shortMessage ||
+        "Sign-in failed. Please try again.";
+      setError(message);
     } finally {
       setIsLoading(false);
     }
@@ -60,11 +87,16 @@ export default function CustomSignInPage() {
     try {
       await signIn.authenticateWithRedirect({
         strategy: provider,
+        // redirectUrl is the intermediate SSO callback Clerk needs to complete the handshake
+        redirectUrl: "/sso-callback",
         redirectUrlComplete: "/",
       });
     } catch (err) {
-      logError(err);
-      const errorMessage = err.errors?.[0]?.message || `OAuth with ${provider} failed.`;
+      console.error("OAuth error:", err);
+      const errorMessage =
+        err.errors?.[0]?.longMessage ||
+        err.errors?.[0]?.message ||
+        `Sign-in with ${provider.replace("oauth_", "")} failed.`;
       setError(errorMessage);
     }
   };
@@ -156,7 +188,17 @@ export default function CustomSignInPage() {
 
             {/* Display error message here */}
             {error && (
-              <p className="text-sm text-center text-red-500">{error}</p>
+              <div className="rounded-lg bg-red-950/60 border border-red-700/50 px-4 py-3 text-sm text-center text-red-400">
+                <p>{error}</p>
+                {redirectingToSignUp && (
+                  <p className="mt-1.5 text-red-300">
+                    Redirecting to sign-up…{" "}
+                    <Link href="/sign-up" className="underline font-medium text-red-200 hover:text-white">
+                      Go now
+                    </Link>
+                  </p>
+                )}
+              </div>
             )}
 
             <button

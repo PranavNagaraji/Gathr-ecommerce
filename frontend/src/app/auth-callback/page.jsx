@@ -20,8 +20,7 @@ export default function AuthCallbackPage() {
     const assignRoleIfMissing = async () => {
       const token = await getToken();
       if (isLoaded && user) {
-        // Only update if role not set
-        if (!user.publicMetadata?.role) {
+        if (!user.publicMetadata?.role || searchParams.get("role")) {
           console.log("Setting role for user", user.id, "to", role);
           const res = await axios.post(`${apiUrl}/set-role`, {
             userId: user.id,
