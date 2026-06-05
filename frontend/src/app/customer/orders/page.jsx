@@ -168,7 +168,7 @@ const Orders = () => {
                 {order.Users ? (
                   <div className="mt-4 flex items-center gap-3">
                     <img
-                      src={order.Users?.delivery_details?.profile?.url || '/avatar.png'}
+                      src={order.Users?.delivery_details?.profile?.url || '/avatar.svg'}
                       alt="Delivery profile"
                       className="w-8 h-8 rounded-full object-cover border border-[var(--border)]"
                     />

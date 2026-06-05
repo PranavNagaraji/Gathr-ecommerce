@@ -390,148 +390,319 @@ const CartItems = () => {
   if (!items.length)
     return <div className="text-center mt-10 text-[var(--muted-foreground)]">No items in this cart.</div>;
 
+  const statusLower = String(order?.status || '').toLowerCase().replace(/'/g, '');
+  const isPreparing = !['ontheway', 'delivered', 'cancelled'].includes(statusLower);
+
   return (
-    <div className="max-w-6xl mx-auto p-6">
-      <div className="mb-4 flex flex-wrap gap-3">
-        <button disabled={reordering} onClick={reorderNow} className="px-4 py-2 rounded bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-60">{reordering ? 'Reordering…' : 'Reorder these items'}</button>
-        <div className="flex items-center gap-2">
-          <select value={scheduleDays} onChange={(e)=>setScheduleDays(Number(e.target.value)||7)} className="border border-[var(--border)] rounded px-2 py-2 bg-[var(--card)]">
-            <option value={7}>Every 7 days</option>
-            <option value={14}>Every 14 days</option>
-            <option value={30}>Every 30 days</option>
-          </select>
-          {scheduled ? (
-            <button onClick={cancelSchedule} className="px-3 py-2 rounded border border-[var(--border)]">Cancel auto-reorder</button>
-          ) : (
-            <button onClick={saveSchedule} className="px-3 py-2 rounded border border-[var(--border)]">Schedule auto-reorder</button>
+    <div className="min-h-screen p-4 md:p-8 bg-[var(--background)] text-[var(--foreground)]">
+      <div className="max-w-6xl mx-auto">
+        
+        {/* Header */}
+        <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+          <div>
+            <h1 className="text-3xl font-extrabold tracking-tight">
+              Order #{order ? String(order.id).slice(-6).toUpperCase() : ''}
+            </h1>
+            <p className="text-sm text-[var(--muted-foreground)] mt-1">
+              Placed on {order ? new Date(order.created_at).toLocaleString() : 'Loading...'}
+            </p>
+          </div>
+          {order && (
+            <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 capitalize">
+              {order.status?.replace(/'/g,'') || 'pending'}
+            </span>
           )}
         </div>
-      </div>
-      {/* Delivery status and live tracking */}
-      {order && (
-        <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <h2 className="text-base font-semibold">Order #{String(order.id).slice(-6).toUpperCase()}</h2>
-              <p className="text-xs text-[var(--muted-foreground)] mt-0.5">Placed on {new Date(order.created_at).toLocaleString()}</p>
-            </div>
-            <span className="text-xs px-2 py-1 rounded-full bg-purple-100 text-purple-800 capitalize">{order.status?.replace(/'/g,'') || 'pending'}</span>
-          </div>
 
-          {String(order.status || '').toLowerCase() === 'ontheway' ? (
-            <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-1 flex items-center gap-3">
-                <img src={order.Users?.delivery_details?.profile?.url || '/avatar.png'} alt="Delivery partner" className="w-12 h-12 rounded-full object-cover border border-[var(--border)]" />
-                <div className="text-sm">
-                  <p className="font-medium leading-tight">{[order.Users?.first_name, order.Users?.last_name].filter(Boolean).join(' ') || 'Delivery Partner'}</p>
-                  <p className="text-xs text-[var(--muted-foreground)]">{order.Users?.delivery_details?.phone || 'Phone N/A'}</p>
-                </div>
-              </div>
-              <div className="md:col-span-2">
-                <div ref={mapRef} className="w-full h-64 rounded-lg border border-[var(--border)]" />
-              </div>
-              {etaInfo && (
-                <div className="md:col-span-3 flex flex-wrap items-center gap-2 text-sm">
-                  <span className="px-2 py-1 rounded bg-[var(--muted)] text-[var(--muted-foreground)]">ETA ~ {etaInfo.min} min</span>
-                  <span className="px-2 py-1 rounded bg-[var(--muted)] text-[var(--muted-foreground)]">Distance {etaInfo.km} km</span>
+        {order && (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
+            
+            {/* Left Column (2/3 width): Live Tracking / Status, Map, Chat */}
+            <div className="lg:col-span-2 space-y-6">
+              
+              {/* Delivery Partner Details & ETA if on the way */}
+              {String(order.status || '').toLowerCase() === 'ontheway' && (
+                <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div className="flex items-center gap-3">
+                      <img 
+                        src={order.Users?.delivery_details?.profile?.url || '/avatar.svg'} 
+                        alt="Delivery partner" 
+                        className="w-12 h-12 rounded-full object-cover border border-[var(--border)]" 
+                      />
+                      <div>
+                        <span className="text-xs text-[var(--muted-foreground)] block">Delivery Partner</span>
+                        <span className="text-sm font-bold">
+                          {[order.Users?.first_name, order.Users?.last_name].filter(Boolean).join(' ') || 'Delivery Partner'}
+                        </span>
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-xs text-[var(--muted-foreground)] block">Contact Phone</span>
+                      <a href={`tel:${order.Users?.delivery_details?.phone}`} className="text-sm font-semibold text-[var(--primary)] hover:underline">
+                        {order.Users?.delivery_details?.phone || 'Phone N/A'}
+                      </a>
+                    </div>
+                  </div>
+
+                  {etaInfo && (
+                    <div className="flex gap-4 pt-2 border-t border-[var(--border)]">
+                      <div>
+                        <span className="text-xs text-[var(--muted-foreground)] block">ETA</span>
+                        <span className="text-sm font-bold">~ {etaInfo.min} min</span>
+                      </div>
+                      <div>
+                        <span className="text-xs text-[var(--muted-foreground)] block">Distance</span>
+                        <span className="text-sm font-bold">{etaInfo.km} km</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
-              <div className="md:col-span-3">
-                <button onClick={() => setChatOpen((v) => !v)} className="w-full md:w-auto px-4 py-2 rounded bg-neutral-900 text-white dark:bg-[var(--muted)] dark:text-[var(--muted-foreground)] hover:opacity-90">{chatOpen ? 'Hide' : 'Chat with delivery partner'}</button>
-                {chatOpen && (
-                  <div className="mt-3 rounded-lg border border-[var(--border)] bg-[var(--card)]">
-                    <div className="max-h-64 overflow-y-auto p-3 flex flex-col gap-2">
-                      {messages.length === 0 && <p className="text-xs text-[var(--muted-foreground)]">Say hi to your delivery partner.</p>}
-                      {messages.map((m, i) => {
-                        const me = m.from === 'customer';
-                        return (
-                          <div key={i} className={`flex ${me ? 'justify-end' : 'justify-start'}`}>
-                            <div className={`max-w-[80%] px-3 py-2 rounded-lg text-sm ${me ? 'bg-[var(--primary)] text-[var(--primary-foreground)]' : 'bg-[var(--muted)] text-[var(--foreground)]'}`}> {m.text} </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                    <div className="flex items-center gap-2 p-2 border-t border-[var(--border)]">
-                      <input value={chatInput} onChange={(e) => setChatInput(e.target.value)} onKeyDown={(e)=>{ if(e.key==='Enter') sendMessage(); }} placeholder="Type a message" className="flex-1 bg-transparent px-3 py-2 rounded border border-[var(--border)] focus:outline-none" />
-                      <button onClick={sendMessage} className="px-3 py-2 rounded bg-[var(--primary)] text-[var(--primary-foreground)]">Send</button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          ) : String(order.status || '').toLowerCase() === 'delivered' ? (
-            <div className="mt-4 flex items-center gap-3">
-              <img src={order.Users?.delivery_details?.profile?.url || '/avatar.png'} alt="Delivery partner" className="w-12 h-12 rounded-full object-cover border border-[var(--border)]" />
-              <div className="text-sm">
-                <p className="font-medium leading-tight">Delivered by {[order.Users?.first_name, order.Users?.last_name].filter(Boolean).join(' ') || 'Delivery Partner'}</p>
-                <p className="text-xs text-[var(--muted-foreground)]">{order.Users?.delivery_details?.phone || 'Phone N/A'}</p>
-                <p className="text-xs text-[var(--muted-foreground)]">Delivered to: {order?.Addresses?.title ? `${order.Addresses.title}, ` : ''}{order?.Addresses?.address || '—'}</p>
-              </div>
-            </div>
-          ) : (
-            <p className="mt-3 text-sm text-[var(--muted-foreground)]">Delivery partner will appear here once the order is on the way.</p>
-          )}
 
-          {/* Delivery address summary (hide after delivered) */}
-          {String(order.status || '').toLowerCase() !== 'delivered' && (
-            <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 text-sm">
-              <div className="font-medium mb-1">Delivering to</div>
-              <div>{order?.Addresses?.title ? `${order.Addresses.title}, ` : ''}{order?.Addresses?.address || '—'}</div>
-            </div>
-          )}
-        </div>
-      )}
-      <header className="mb-6 text-center">
-        <h1 className="text-3xl font-bold tracking-tight text-[var(--foreground)]">Order Details</h1>
-        <p className="text-sm text-[var(--muted-foreground)] mt-2">Items for Order #{order ? String(order.id).slice(-6).toUpperCase() : ''}</p>
-      </header>
+              {/* Map View */}
+              {String(order.status || '').toLowerCase() === 'ontheway' && (
+                <div className="rounded-3xl overflow-hidden border border-[var(--border)] shadow-sm bg-[var(--card)] p-1">
+                  <div ref={mapRef} className="w-full h-80 rounded-2xl" />
+                </div>
+              )}
 
-      {/* Bill summary */}
-      <div className="mb-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-        <h3 className="text-base font-semibold mb-2">Bill</h3>
-        <div className="text-sm flex flex-col gap-1">
-          <div className="flex justify-between"><span>Items</span><span>{bill.itemCount}</span></div>
-          <div className="flex justify-between"><span>Subtotal</span><span>₹{bill.subtotal.toLocaleString('en-IN')}</span></div>
-          <div className="flex justify-between font-medium border-t border-[var(--border)] pt-2"><span>Amount Paid</span><span>₹{bill.paid.toLocaleString('en-IN')}</span></div>
-        </div>
-      </div>
-      <motion.section
-        role="list"
-        aria-label="Order items"
-        initial="hidden"
-        animate="show"
-        variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}
-        className="grid sm:grid-cols-2 lg:grid-cols-3 gap-5"
-      >
-        <AnimatePresence>
-          {items.map((item) => (
-            <motion.div
-              role="listitem"
-              key={item.id}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 12 }}
-              transition={{ duration: 0.22, ease: "easeOut" }}
-              className="rounded-xl border border-[var(--border)] bg-[var(--card)] text-[var(--card-foreground)] shadow-sm hover:shadow-md transition-shadow flex flex-col overflow-hidden"
-            >
-              <Link href={`/customer/getShops/${item.Items.shop_id}/item/${item.Items.id}`} className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)]">
-                <img
-                  src={item.Items.images?.[0]?.url || '/placeholder.png'}
-                  alt={item.Items.name}
-                  className="w-full h-48 object-cover"
-                />
-                <div className="p-4">
-                  <h2 className="text-base font-semibold mb-1">{item.Items.name}</h2>
-                  <div className="text-sm flex items-center justify-between">
-                    <span>₹{Number(item.Items.price).toLocaleString('en-IN')} × {item.quantity}</span>
-                    <span className="font-semibold">₹{(Number(item.Items.price) * Number(item.quantity)).toLocaleString('en-IN')}</span>
+              {/* Chat Console */}
+              {String(order.status || '').toLowerCase() === 'ontheway' && (
+                <div className="space-y-4">
+                  <button 
+                    onClick={() => setChatOpen((v) => !v)} 
+                    className="w-full md:w-auto px-6 py-3 font-semibold rounded-xl bg-neutral-900 text-white dark:bg-[var(--muted)] dark:text-[var(--muted-foreground)] hover:opacity-90 transition"
+                  >
+                    {chatOpen ? 'Hide Chat' : 'Chat with Delivery Partner'}
+                  </button>
+                  {chatOpen && (
+                    <div className="rounded-2xl border border-[var(--border)] bg-[var(--card)] shadow-sm">
+                      <div className="max-h-64 overflow-y-auto p-4 flex flex-col gap-3">
+                        {messages.length === 0 && (
+                          <p className="text-sm text-[var(--muted-foreground)] text-center py-4">Say hi to your delivery partner.</p>
+                        )}
+                        {messages.map((m, i) => {
+                          const me = m.from === 'customer';
+                          return (
+                            <div key={i} className={`flex ${me ? 'justify-end' : 'justify-start'}`}>
+                              <div className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${me ? 'bg-[var(--primary)] text-[var(--primary-foreground)] rounded-br-none' : 'bg-[var(--muted)]/60 text-[var(--foreground)] rounded-bl-none'}`}>
+                                {m.text}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <div className="flex items-center gap-2 p-3 border-t border-[var(--border)]">
+                        <input 
+                          value={chatInput} 
+                          onChange={(e) => setChatInput(e.target.value)} 
+                          onKeyDown={(e)=>{ if(e.key==='Enter') sendMessage(); }} 
+                          placeholder="Type a message..." 
+                          className="flex-1 bg-transparent px-4 py-2.5 rounded-xl border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30 text-sm" 
+                        />
+                        <button onClick={sendMessage} className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-95 transition">Send</button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Delivered driver details */}
+              {String(order.status || '').toLowerCase() === 'delivered' && (
+                <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
+                  <div className="flex items-center gap-4">
+                    <img 
+                      src={order.Users?.delivery_details?.profile?.url || '/avatar.svg'} 
+                      alt="Delivery partner" 
+                      className="w-16 h-16 rounded-full object-cover border border-[var(--border)]" 
+                    />
+                    <div>
+                      <h3 className="text-lg font-bold">Delivered Successfully!</h3>
+                      <p className="text-sm text-[var(--muted-foreground)] mt-0.5">
+                        Delivered by {[order.Users?.first_name, order.Users?.last_name].filter(Boolean).join(' ') || 'Delivery Partner'}
+                      </p>
+                      {order.Users?.delivery_details?.phone && (
+                        <p className="text-sm text-[var(--muted-foreground)]">Phone: {order.Users.delivery_details.phone}</p>
+                      )}
+                    </div>
                   </div>
                 </div>
-              </Link>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </motion.section>
+              )}
+
+              {/* Pending / Accepted / Placed / Ordered message */}
+              {isPreparing && (
+                <div className="border border-[var(--border)] rounded-3xl p-10 bg-[var(--card)]/40 text-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-[var(--muted)] flex items-center justify-center mx-auto mb-2 text-xl">⏳</div>
+                  <h3 className="text-lg font-semibold">Preparing Your Order</h3>
+                  <p className="text-sm text-[var(--muted-foreground)] max-w-md mx-auto">
+                    The shop is preparing your items. A delivery partner will appear here with live route tracking as soon as they pick it up!
+                  </p>
+                </div>
+              )}
+
+              {/* Cancelled message */}
+              {statusLower === 'cancelled' && (
+                <div className="border border-[var(--border)] rounded-3xl p-10 bg-[var(--card)]/40 text-center space-y-3">
+                  <div className="w-16 h-16 rounded-full bg-[var(--muted)] flex items-center justify-center mx-auto mb-2 text-xl">❌</div>
+                  <h3 className="text-lg font-semibold">Order Cancelled</h3>
+                  <p className="text-sm text-[var(--muted-foreground)] max-w-md mx-auto">
+                    This order was cancelled. Please check with support or place a new order.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Right Column (1/3 width): Sidebar Info (Reorder, Address, Shop, Items, Bill) */}
+            <div className="space-y-6">
+              
+              {/* Reorder and Scheduling Actions */}
+              <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
+                <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
+                  Order Actions
+                </h3>
+                <button 
+                  disabled={reordering} 
+                  onClick={reorderNow} 
+                  className="w-full py-3 font-semibold rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 transition text-sm"
+                >
+                  {reordering ? 'Reordering…' : 'Reorder These Items'}
+                </button>
+                
+                <div className="border-t border-[var(--border)] pt-4 space-y-3">
+                  <span className="text-xs text-[var(--muted-foreground)] block font-semibold">Auto-Reorder Schedule</span>
+                  <div className="flex gap-2">
+                    <select 
+                      value={scheduleDays} 
+                      onChange={(e)=>setScheduleDays(Number(e.target.value)||7)} 
+                      className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2 bg-[var(--card)] text-sm focus:outline-none"
+                    >
+                      <option value={7}>Every 7 days</option>
+                      <option value={14}>Every 14 days</option>
+                      <option value={30}>Every 30 days</option>
+                    </select>
+                    {scheduled ? (
+                      <button 
+                        onClick={cancelSchedule} 
+                        className="px-3 py-2 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-[var(--muted)] transition"
+                      >
+                        Cancel
+                      </button>
+                    ) : (
+                      <button 
+                        onClick={saveSchedule} 
+                        className="px-3 py-2 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-[var(--muted)] transition"
+                      >
+                        Schedule
+                      </button>
+                    )}
+                  </div>
+                  {scheduled && (
+                    <p className="text-[11px] text-[var(--muted-foreground)] bg-[var(--muted)]/40 p-2 rounded-lg">
+                      Scheduled next: {new Date(scheduled.nextAt).toLocaleDateString()} (every {scheduled.frequencyDays} days)
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Details card */}
+              <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-6">
+                
+                {/* Customer Details */}
+                <div className="space-y-3">
+                  <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
+                    Customer Details
+                  </h3>
+                  <div>
+                    <span className="text-xs text-[var(--muted-foreground)] block">Name</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">
+                      {user?.fullName || 'Customer'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-[var(--muted-foreground)] block">Delivery Address</span>
+                    <span className="text-sm font-bold text-[var(--foreground)] block">
+                      {order.Addresses?.title || 'Address'}
+                    </span>
+                    <span className="text-sm text-[var(--muted-foreground)] block">
+                      {order.Addresses?.address}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Shop Details */}
+                <div className="border-t border-[var(--border)] pt-5 space-y-3">
+                  <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
+                    Shop Details
+                  </h3>
+                  <div>
+                    <span className="text-xs text-[var(--muted-foreground)] block">Shop Name</span>
+                    <span className="text-sm font-semibold text-[var(--foreground)]">
+                      {order.Shops?.shop_name}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-xs text-[var(--muted-foreground)] block">Address</span>
+                    <span className="text-sm text-[var(--muted-foreground)]">
+                      {order.Shops?.address}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Order Items */}
+                <div className="border-t border-[var(--border)] pt-5 space-y-3">
+                  <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
+                    Order Items
+                  </h3>
+                  <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
+                    {items.map((item) => (
+                      <Link 
+                        key={item.id} 
+                        href={`/customer/getShops/${item.Items?.shop_id}/item/${item.Items?.id}`} 
+                        className="flex items-center justify-between text-sm gap-4 group hover:no-underline"
+                      >
+                        <div className="truncate text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">
+                          <span className="font-semibold text-xs bg-[var(--muted)] px-1.5 py-0.5 rounded mr-1.5">{item.quantity}x</span>
+                          {item.Items?.name || 'Item'}
+                        </div>
+                        <div className="font-semibold shrink-0 text-[var(--muted-foreground)]">
+                          ₹{(item.Items?.price || 0) * (item.quantity || 1)}
+                        </div>
+                      </Link>
+                    ))}
+                    {items.length === 0 && (
+                      <p className="text-xs text-[var(--muted-foreground)]">No items loaded</p>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bill Summary */}
+                <div className="border-t border-[var(--border)] pt-5 space-y-2">
+                  <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
+                    Bill Summary
+                  </h3>
+                  <div className="space-y-1 text-sm text-[var(--muted-foreground)]">
+                    <div className="flex justify-between">
+                      <span>Subtotal ({bill.itemCount} items)</span>
+                      <span>₹{bill.subtotal.toLocaleString('en-IN')}</span>
+                    </div>
+                  </div>
+                  <div className="border-t border-[var(--border)] pt-3 flex justify-between items-center">
+                    <span className="text-sm font-bold text-[var(--foreground)]">Amount Paid</span>
+                    <span className="text-xl font-black text-[var(--foreground)]">
+                      ₹{bill.paid.toLocaleString('en-IN')}
+                    </span>
+                  </div>
+                </div>
+                
+              </div>
+
+            </div>
+
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }

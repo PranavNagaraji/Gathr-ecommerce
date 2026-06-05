@@ -320,7 +320,7 @@ export default function Navbar() {
         initial={{ y: -80, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 1, ease: "easeOut" }}
-        className="sticky top-0 z-[1000] w-full bg-card text-[var(--foreground)] shadow-[0_6px_20px_rgba(0,0,0,0.1)] backdrop-blur supports-[backdrop-filter]:bg-card/85"
+        className="sticky top-0 z-[10000] w-full bg-card text-[var(--foreground)] shadow-[0_6px_20px_rgba(0,0,0,0.1)] backdrop-blur supports-[backdrop-filter]:bg-card/85"
         style={{ fontFamily: "'Inter', sans-serif" }}
       >
         <div className="w-full flex items-center justify-between px-6 md:px-12 py-3 relative">
