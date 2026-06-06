@@ -2,6 +2,7 @@ import supabase from "../db.js";
 import { Clerk } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
+import { sendEmail } from "../utils/mailer.js";
 
 dotenv.config();
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -58,26 +59,14 @@ export const banShop = async (req, res) => {
             <p>Shop: ${shop.shop_name || "#" + shop.id}</p>
           </div>
         `;
-        const { MJ_APIKEY_PUBLIC, MJ_APIKEY_PRIVATE, MJ_SENDER_EMAIL } = process.env;
-        if (MJ_APIKEY_PUBLIC && MJ_APIKEY_PRIVATE && MJ_SENDER_EMAIL) {
-          const resp = await fetch("https://api.mailjet.com/v3.1/send", {
-            method: "POST",
-            headers: {
-              Authorization: "Basic " + Buffer.from(`${MJ_APIKEY_PUBLIC}:${MJ_APIKEY_PRIVATE}`).toString("base64"),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              Messages: [
-                {
-                  From: { Email: MJ_SENDER_EMAIL, Name: "Gathr" },
-                  To: [{ Email: emailTo, Name: displayName }],
-                  Subject: subject,
-                  HTMLPart: html,
-                },
-              ],
-            }),
+        try {
+          await sendEmail({
+            to: emailTo,
+            subject,
+            html
           });
-          await resp.json().catch(() => null);
+        } catch (mailErr) {
+          console.error("Failed to send ban shop email:", mailErr.message);
         }
       } catch {}
     }
@@ -95,33 +84,17 @@ export const sendAdminMail = async (req, res) => {
     if (!to || !subject || (!text && !html)) {
       return res.status(400).json({ message: "to, subject and text or html are required" });
     }
-    const { MJ_APIKEY_PUBLIC, MJ_APIKEY_PRIVATE, MJ_SENDER_EMAIL } = process.env;
-    if (!MJ_APIKEY_PUBLIC || !MJ_APIKEY_PRIVATE || !MJ_SENDER_EMAIL) {
-      return res.status(500).json({ message: "Mailjet env not configured" });
-    }
     const recipients = Array.isArray(to) ? to : [to];
-    const resp = await fetch("https://api.mailjet.com/v3.1/send", {
-      method: "POST",
-      headers: {
-        Authorization: "Basic " + Buffer.from(`${MJ_APIKEY_PUBLIC}:${MJ_APIKEY_PRIVATE}`).toString("base64"),
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        Messages: [
-          {
-            From: { Email: MJ_SENDER_EMAIL, Name: "Gathr Admin" },
-            To: recipients.map((e) => ({ Email: e })),
-            Subject: subject,
-            TextPart: text || undefined,
-            HTMLPart: html || undefined,
-          },
-        ],
-      }),
-    });
-    const data = await resp.json().catch(() => null);
-    if (!resp.ok) {
-      return res.status(500).json({ message: "Mailjet send failed", error: data });
-    }
+    await Promise.all(
+      recipients.map((email) =>
+        sendEmail({
+          to: email,
+          subject,
+          text,
+          html,
+        })
+      )
+    );
     return res.status(200).json({ ok: true });
   } catch (e) {
     return res.status(500).json({ message: "Internal server error" });
@@ -156,25 +129,14 @@ export const banCarrier = async (req, res) => {
             ${reason ? `<p><strong>Reason:</strong> ${String(reason)}</p>` : ""}
           </div>
         `;
-        const { MJ_APIKEY_PUBLIC, MJ_APIKEY_PRIVATE, MJ_SENDER_EMAIL } = process.env;
-        if (MJ_APIKEY_PUBLIC && MJ_APIKEY_PRIVATE && MJ_SENDER_EMAIL) {
-          await fetch("https://api.mailjet.com/v3.1/send", {
-            method: "POST",
-            headers: {
-              Authorization: "Basic " + Buffer.from(`${MJ_APIKEY_PUBLIC}:${MJ_APIKEY_PRIVATE}`).toString("base64"),
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              Messages: [
-                {
-                  From: { Email: MJ_SENDER_EMAIL, Name: "Gathr" },
-                  To: [{ Email: emailTo }],
-                  Subject: subject,
-                  HTMLPart: html,
-                },
-              ],
-            }),
+        try {
+          await sendEmail({
+            to: emailTo,
+            subject,
+            html
           });
+        } catch (mailErr) {
+          console.error("Failed to send ban carrier email:", mailErr.message);
         }
       }
     } catch {}

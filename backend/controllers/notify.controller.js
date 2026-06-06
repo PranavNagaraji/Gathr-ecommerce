@@ -1,6 +1,7 @@
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 import { Clerk } from "@clerk/clerk-sdk-node";
+import { sendEmail } from "../utils/mailer.js";
 
 dotenv.config();
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -47,34 +48,13 @@ function renderAutoReorderEmail({ phase, frequencyDays, nextAt, cartId }) {
 }
 
 async function sendMailjet({ to, subject, html }) {
-  const { MJ_APIKEY_PUBLIC, MJ_APIKEY_PRIVATE, MJ_SENDER_EMAIL } = process.env;
-  if (!MJ_APIKEY_PUBLIC || !MJ_APIKEY_PRIVATE || !MJ_SENDER_EMAIL) {
-    console.log("[notify] (dry-run) To:", to, "Subject:", subject);
-    return { ok: true, dryRun: true };
+  try {
+    const result = await sendEmail({ to, subject, html });
+    return { ok: true, method: result.method };
+  } catch (error) {
+    console.error("[notify] sendEmail error:", error.message);
+    throw error;
   }
-  const response = await fetch("https://api.mailjet.com/v3.1/send", {
-    method: "POST",
-    headers: {
-      "Authorization": "Basic " + Buffer.from(`${MJ_APIKEY_PUBLIC}:${MJ_APIKEY_PRIVATE}`).toString("base64"),
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      Messages: [
-        {
-          From: { Email: MJ_SENDER_EMAIL, Name: "Gathr Notifications" },
-          To: [{ Email: to }],
-          Subject: subject,
-          HTMLPart: html,
-        },
-      ],
-    }),
-  });
-  const result = await response.json();
-  if (!response.ok) {
-    console.error("[notify] Mailjet error", result);
-    throw new Error(result?.Message || "Mailjet send failed");
-  }
-  return { ok: true };
 }
 
 export async function autoReorderNotify(req, res) {

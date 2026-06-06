@@ -3,6 +3,7 @@ import { Clerk } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
 import cloudinary from "../cloudinary.js";
 import fetch from "node-fetch";
+import { sendEmail } from "../utils/mailer.js";
 
 dotenv.config();
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -481,20 +482,10 @@ export const completeDelivery = async (req, res) => {
                 </div>
               `;
               try {
-                const mjAuth = Buffer.from(`${process.env.MJ_APIKEY_PUBLIC}:${process.env.MJ_APIKEY_PRIVATE}`).toString("base64");
-                await fetch("https://api.mailjet.com/v3.1/send", {
-                  method: "POST",
-                  headers: { "Authorization": `Basic ${mjAuth}`, "Content-Type": "application/json" },
-                  body: JSON.stringify({
-                    Messages: [
-                      {
-                        From: { Email: process.env.MJ_SENDER_EMAIL, Name: "Gathr" },
-                        To: [{ Email: customer.email, Name: name }],
-                        Subject: subject,
-                        HTMLPart: html
-                      }
-                    ]
-                  })
+                await sendEmail({
+                  to: customer.email,
+                  subject: subject,
+                  html: html
                 });
               } catch (e) {
                 console.error("receipt email error:", e.message);
