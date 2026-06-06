@@ -125,7 +125,7 @@ function buildOtpEmailHtml(otp, orderDetails) {
 router.post("/", requireAuth, async (req, res) => {
   try {
     const { email, otp, orderId } = req.body;
-    console.log(`📩 OTP request for ${email}`);
+    // console.log(`📩 OTP request for ${email}`);
 
     if (!email) return res.status(400).json({ error: "Email is required" });
 
@@ -147,10 +147,10 @@ router.post("/", requireAuth, async (req, res) => {
           html: buildOtpEmailHtml(generatedOtp, orderDetails),
         });
 
-        console.log(`✅ OTP sent to ${email}: ${generatedOtp} via ${result.method}`);
+        // console.log(`✅ OTP sent to ${email}: ${generatedOtp} via ${result.method}`);
         return res.json({ success: true, message: `OTP sent successfully via ${result.method}` });
       } catch (err) {
-        console.error("❌ Failed to send OTP:", err);
+        // console.error("❌ Failed to send OTP:", err);
         return res.status(500).json({ error: `Failed to send OTP: ${err.message}` });
       }
     }

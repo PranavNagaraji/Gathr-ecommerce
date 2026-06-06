@@ -21,16 +21,18 @@ Gathr is a full-stack, production-grade web application that enables local busin
 
 | Concern | Technology |
 |---|---|
-| Framework | Next.js 15.x with App Router |
+| Framework | Next.js 15.x with App Router + Turbopack |
 | Authentication | Clerk (multi-role: Customer / Merchant / Carrier / Admin) |
-| UI Components | Ant Design (AntD) v5, Lucide React icons |
+| UI Components | Ant Design (AntD) v5, MUI v7, Lucide React, React Icons |
 | Styling | Tailwind CSS v4, vanilla CSS variables (dark/light theming) |
-| Animations | Framer Motion v12, GSAP v3, Three.js v0.179 |
+| Animations | Framer Motion v12, GSAP v3, Three.js v0.179, OGL |
 | HTTP Client | Axios v1 |
 | Real-time | Socket.IO client (order tracking, live delivery, in-order chat) |
-| Maps | Google Maps JavaScript API, Google Places Autocomplete |
+| Maps | Google Maps JavaScript API (`@react-google-maps/api`), Leaflet |
 | i18n | react-i18next (English, Telugu, Tamil, Hindi) |
 | Notifications | react-hot-toast |
+| Carousel | react-slick + slick-carousel |
+| Firebase | Firebase v12 (auxiliary services) |
 
 ### Backend — Express.js 5
 
@@ -43,7 +45,7 @@ Gathr is a full-stack, production-grade web application that enables local busin
 | Image Storage | Cloudinary v2 |
 | File Uploads | Multer v2 |
 | Payments | Razorpay (order creation + webhook verification) |
-| Email / OTP | Mailjet API |
+| Email / OTP | SMTP via Nodemailer (Gmail/custom) with Mailjet as fallback |
 | AI | Google Gemini 2.5 Flash API |
 
 ---
@@ -97,12 +99,12 @@ Gathr/
 │   │   ├── complaints.controller.js
 │   │   ├── customer.controller.js  # Cart, shops, search, ratings
 │   │   ├── customer2.controller.js # Addresses, wishlist, order history
-│   │   ├── customer3.controller.js # Recommendations, similar items
+│   │   ├── customer3.contoller.js  # Recommendations, similar items
 │   │   ├── customer_ai.controller.js # Gemini image description for customers
 │   │   ├── delivery.controller.js  # Carrier assignment + live tracking
 │   │   ├── merchant.controller.js  # Shop & inventory CRUD
 │   │   ├── merchant3.controller.js # Order status management
-│   │   ├── merchant_ai.controller.js # Gemini AI product generation from image
+│   │   ├── merchant_ai.controller.js # Gemini AI product generation from image/title
 │   │   ├── merchantup.controller.js  # Shop/item update & delete
 │   │   ├── notify.controller.js    # Email/OTP notifications
 │   │   └── order.controller.js     # Order lifecycle management
@@ -114,9 +116,11 @@ Gathr/
 │   │   ├── notifyRoute.js
 │   │   ├── complaintsRoute.js
 │   │   ├── adminRoute.js
+│   │   ├── adminPublicRoute.js     # Admin search (email-gated, no Clerk auth)
 │   │   └── otpRoute.js
 │   ├── utils/
-│   │   └── check.js                # Clerk JWT verification middleware
+│   │   ├── check.js                # Clerk JWT verification middleware
+│   │   └── mailer.js               # Unified email sender (SMTP → Mailjet fallback)
 │   ├── cloudinary.js               # Cloudinary SDK config
 │   ├── db.js                       # Supabase client singleton
 │   ├── index.js                    # Express app + Socket.IO server entry
@@ -163,7 +167,7 @@ Gathr/
 ### 🛠️ Admin Panel
 - **User ban/unban management**
 - **Complaint resolution queue**
-- **Transactional email dispatch** via Mailjet
+- **Transactional email dispatch** via SMTP/Mailjet
 
 ### 💬 Real-time Features (Socket.IO)
 - Carrier GPS location broadcast to order-specific rooms
@@ -178,15 +182,15 @@ Gathr/
 
 **Problem**: Merchants, especially small shopkeepers, struggle to write accurate product names, descriptions, and prices — particularly for items they just unpacked.
 
-**Solution**: On the `Add Item` and `Edit Item` pages, merchants can upload a product photo and click **"Generate with AI"**. The backend sends the image to **Google Gemini 2.5 Flash** (multimodal) with a structured prompt. Gemini returns a strict JSON response containing:
+**Solution**: On the `Add Item` and `Edit Item` pages, merchants can click **"Generate with AI"**. The system sends whichever data is available — product images, the product title, or both — to the backend, which forwards them to **Google Gemini 2.5 Flash** (multimodal) with a structured prompt. Gemini returns a strict JSON response containing:
 - `name` – human-readable product name
 - `description` – 2–4 sentence marketing description
 - `categories` – array of matched inventory categories
 - `price` – AI-estimated MRP in INR
 
-A two-pass retry mechanism with decreasing temperature ensures reliable JSON parsing. The frontend pre-fills all form fields instantly, allowing the merchant to review and submit without typing.
+**Input priority**: If product images are available, they are sent alongside the title for best accuracy. If no images are uploaded, the title alone is used as input — so the button always works. A two-pass retry mechanism with decreasing temperature ensures reliable JSON parsing. The frontend pre-fills all form fields instantly, allowing the merchant to review and submit without typing.
 
-**Files**: [`merchant_ai.controller.js`](backend/controllers/merchant_ai.controller.js) · [`addItem/page.jsx`](frontend/src/app/merchant/addItem/page.jsx)
+**Files**: [`merchant_ai.controller.js`](backend/controllers/merchant_ai.controller.js) · [`addItem/page.jsx`](frontend/src/app/merchant/addItem/page.jsx) · [`editItem/page.jsx`](frontend/src/app/merchant/editItem/page.jsx)
 
 ---
 
@@ -222,7 +226,7 @@ Merchants can also **type a barcode number manually** and trigger the lookup wit
 
 **Result**: A merchant can point their phone camera at a product barcode and have name, description, image, categories, and estimated price pre-filled in ~3 seconds — dramatically reducing listing friction for high-volume inventory ingestion.
 
-**Files**: [`addItem/page.jsx`](frontend/src/app/merchant/addItem/page.jsx) (lines 63–508)
+**Files**: [`addItem/page.jsx`](frontend/src/app/merchant/addItem/page.jsx)
 
 ---
 
@@ -258,7 +262,8 @@ Gathr supports four languages out of the box: **English**, **Telugu (తెల�
 ### Prerequisites
 - Node.js v18 or higher
 - npm (v9+) or yarn
-- Accounts with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Mailjet](https://mailjet.com), [Google Cloud](https://cloud.google.com) (Maps + Gemini APIs)
+- Accounts with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google Cloud](https://cloud.google.com) (Maps + Gemini APIs)
+- A Gmail account (or any SMTP provider) for transactional email. Optionally, a [Mailjet](https://mailjet.com) account as a fallback.
 
 ---
 
@@ -278,6 +283,12 @@ NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY=pk_test_YOUR_CLERK_PUBLISHABLE_KEY
 
 # Clerk — secret key (also used by Next.js API routes)
 CLERK_SECRET_KEY=sk_test_YOUR_CLERK_SECRET_KEY
+
+# Clerk routing (required for custom auth pages)
+NEXT_PUBLIC_CLERK_SIGN_IN_URL=/sign-in
+NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
+NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
+NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/auth-callback
 
 # Google Maps JavaScript API key (enable: Maps JS API, Places API, Geocoding API)
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
@@ -300,7 +311,7 @@ CLERK_PUBLISHABLE_KEY=pk_test_YOUR_CLERK_PUBLISHABLE_KEY
 SUPABASE_URL=https://YOUR_PROJECT_ID.supabase.co
 SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
 
-# Supabase — direct PostgreSQL connection string (used for raw pg queries)
+# Supabase — direct PostgreSQL connection string (used for raw pg queries / migrations)
 SUPABASE_DB_URL=postgresql://postgres.YOUR_PROJECT_ID:YOUR_DB_PASSWORD@aws-0-ap-south-1.pooler.supabase.com:5432/postgres
 
 # Cloudinary — image and asset storage
@@ -315,17 +326,27 @@ GEMINI_API_KEY=YOUR_GOOGLE_GEMINI_API_KEY
 RAZORPAY_KEY_ID=rzp_test_YOUR_RAZORPAY_KEY_ID
 RAZORPAY_KEY_SECRET=YOUR_RAZORPAY_KEY_SECRET
 
-# Mailjet — transactional email / OTP delivery
+# Email — Primary: SMTP (Gmail recommended)
+# Enable "App Passwords" in your Google account for Gmail SMTP
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@gmail.com
+SMTP_PASS=your-gmail-app-password
+
+# Email — Fallback: Mailjet API (optional, used if SMTP is not configured or fails)
 MJ_APIKEY_PUBLIC=YOUR_MAILJET_PUBLIC_KEY
 MJ_APIKEY_PRIVATE=YOUR_MAILJET_PRIVATE_KEY
 MJ_SENDER_EMAIL=your-verified-sender@yourdomain.com
 
 # Delivery fee configuration (adjustable)
-GST_RATE=0.18
+GST_RATE=0
 DELIVERY_BASE_KM=2
 DELIVERY_BASE_FEE=30
 DELIVERY_PER_KM_FEE=10
 ```
+
+> **Email Priority**: The backend tries SMTP first. If SMTP is not configured or fails, it automatically falls back to Mailjet. You only need one of the two configured.
 
 > **Security Note**: Never commit your `.env` files to version control. Both `frontend/.env` and `backend/.env` are listed in `.gitignore`.
 
@@ -350,7 +371,7 @@ npm install
 cd ../backend
 npm run dev
 
-# 5. Start frontend (runs on http://localhost:3000)
+# 5. Start frontend with Turbopack (runs on http://localhost:3000)
 cd ../frontend
 npm run dev
 ```
@@ -370,7 +391,11 @@ npm run dev
 | `POST` | `/api/merchant/add_shop` | Create shop |
 | `POST` | `/api/merchant/add_items` | Add product to inventory |
 | `POST` | `/api/merchant/get_items` | Get merchant's products |
+| `POST` | `/api/merchant/get_item` | Get a single product |
 | `POST` | `/api/merchant/get_shop` | Get shop details |
+| `POST` | `/api/merchant/check_shop_exists` | Check if merchant has a shop |
+| `POST` | `/api/merchant/check_duplicate_title` | Check for duplicate product title |
+| `POST` | `/api/merchant/show_orders` | Get orders for merchant |
 | `PUT` | `/api/merchant/update_shop` | Update shop info |
 | `PUT` | `/api/merchant/update_items` | Update product |
 | `PUT` | `/api/merchant/update_order_status` | Update order status |
@@ -378,7 +403,8 @@ npm run dev
 | `DELETE` | `/api/merchant/delete_shop` | Delete shop |
 | `GET` | `/api/merchant/get_pending_carts/:clerkId` | Get pending orders |
 | `GET` | `/api/merchant/get_all_carts/:clerkId` | Get all order history |
-| `POST` | `/api/merchant/ai/generateFromImage` | AI product generation from image |
+| `GET` | `/api/merchant/banStatus/:clerkId` | Check merchant ban status |
+| `POST` | `/api/merchant/ai/generateFromImage` | AI product generation from image and/or title |
 
 ### Customer Routes
 | Method | Endpoint | Description |
@@ -406,11 +432,10 @@ npm run dev
 | `POST` | `/razorpay/create-order` | Create Razorpay payment order |
 | `POST` | `/razorpay/webhook` | Webhook for payment confirmation |
 
-### OTP / Notifications (public)
+### OTP (public — no Clerk auth required)
 | Method | Endpoint | Description |
 |---|---|---|
-| `POST` | `/api/otp/send` | Send OTP email via Mailjet |
-| `POST` | `/api/otp/verify` | Verify OTP |
+| `POST` | `/api/otp/` | Send OTP (omit `otp` field) or verify OTP (include `otp` field) |
 
 ---
 
@@ -418,7 +443,7 @@ npm run dev
 
 - **Color scheme**: Fully CSS-variable-driven dark/light theming (`oklch` color space), toggleable at runtime without page reload
 - **Typography**: Inter, Outfit, Quicksand (Google Fonts)
-- **Animations**: Framer Motion for page transitions, micro-interactions, and animated list entry/exit; GSAP for landing page hero sequences
+- **Animations**: Framer Motion for page transitions, micro-interactions, and animated list entry/exit; GSAP for landing page hero sequences; Three.js / OGL for 3D visual effects
 - **Accessibility**: `aria-label`, `focus-visible` ring styles, keyboard-navigable steppers throughout
 
 ---
@@ -433,7 +458,7 @@ npm run dev
 - [x] Real-time order tracking + live GPS (Socket.IO)
 - [x] In-order live chat
 - [x] Merchant inventory management (CRUD)
-- [x] AI product listing from image (Gemini Vision)
+- [x] AI product listing from image and/or title (Gemini Vision)
 - [x] Barcode / UPC scan-to-list pipeline
 - [x] Admin panel (ban/unban, complaints, bulk email)
 - [x] Carrier delivery portal
@@ -441,6 +466,7 @@ npm run dev
 - [x] Dark / light mode (no reload, CSS variable-based)
 - [x] Personalised product recommendations
 - [x] Address book management
+- [x] OTP-verified delivery confirmation via email
 
 ---
 
