@@ -1,24 +1,18 @@
-'use client';
-
+// ✅ NO 'use client' here — root layout MUST be a server component in Next.js App Router.
+// usePathname() lives inside ConditionalLayout.jsx (a separate 'use client' component).
 import "./globals.css";
 import { ClerkProvider } from "@clerk/nextjs";
-import Navbar from "@/components/Navbar";
 import UIProviders from "@/components/ui/UIProviders";
-import Footer from "@/components/Footer";
-import { usePathname } from "next/navigation";
+import ConditionalLayout from "@/components/ConditionalLayout";
+
+export const metadata = {
+  title: "Gathr",
+  description: "Gathr — Your local marketplace",
+};
 
 export default function RootLayout({ children }) {
-  const pathname = usePathname();
-
-  // Hide Navbar and Footer on auth pages
-  const isAuthPage =
-    pathname === "/login" ||
-    pathname === "/signup" ||
-    pathname?.startsWith("/sign-in") ||
-    pathname?.startsWith("/sign-up");
-
   return (
-    <ClerkProvider publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}>
+    <ClerkProvider>
       <html lang="en" suppressHydrationWarning>
         <head>
           {/* Google Fonts */}
@@ -33,8 +27,9 @@ export default function RootLayout({ children }) {
         <body>
           <div id="clerk-captcha" />
           <UIProviders>
-            <Navbar />
-            {children}
+            <ConditionalLayout>
+              {children}
+            </ConditionalLayout>
           </UIProviders>
         </body>
       </html>
