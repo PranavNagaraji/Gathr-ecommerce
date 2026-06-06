@@ -24,7 +24,7 @@ const app = express();
 const server = http.createServer(app);
 
 //cors policy security check
-const allowedOrigins = ["https://gathr-se.vercel.app", "http://localhost:3000"];
+const allowedOrigins = ["https://gathr-ecommerce.vercel.app", "http://localhost:3000"];
 app.use(cors({
   origin: allowedOrigins,
   methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
