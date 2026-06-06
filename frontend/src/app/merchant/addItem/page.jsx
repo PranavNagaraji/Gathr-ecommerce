@@ -199,7 +199,7 @@ export default function addItemPage() {
     const scanAbortControllerRef = useRef(null);
 
     useEffect(() => {
-        if (scanOverlay.active) {
+        if (scanOverlay.active || barcodeCenterOpen) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = '';
@@ -207,7 +207,7 @@ export default function addItemPage() {
         return () => {
             document.body.style.overflow = '';
         };
-    }, [scanOverlay.active]);
+    }, [scanOverlay.active, barcodeCenterOpen]);
 
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
@@ -1219,20 +1219,20 @@ export default function addItemPage() {
                 </div>
               </div>
             )}
-            {barcodeCenterOpen && (
-              <div className="fixed inset-0 z-[10000] bg-black/60 grid place-items-center">
-                <div className="w-[92vw] max-w-3xl rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl overflow-hidden">
-                  <div className="p-3 border-b border-[var(--border)] flex items-center justify-between">
-                    <div className="font-semibold">Center barcode image</div>
-                    <button type="button" onClick={()=> { setBarcodeCenterOpen(false); }} className="px-2 py-1 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">Close</button>
+            {barcodeCenterOpen && mounted && typeof window !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-[15000] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
+                <div className="w-full max-w-[600px] max-h-[85vh] rounded-xl bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] shadow-2xl flex flex-col overflow-hidden">
+                  <div className="p-3 border-b border-[var(--border)] flex items-center justify-between shrink-0">
+                    <div className="font-semibold text-lg">Center barcode image</div>
+                    <button type="button" onClick={()=> { setBarcodeCenterOpen(false); }} className="px-3 py-1.5 text-sm font-medium rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors">Close</button>
                   </div>
-                  <div className="p-4 grid gap-4 relative">
+                  <div className="p-4 flex-1 overflow-y-auto min-h-0 relative flex flex-col gap-4">
                     {barcodeBusy && (
                       <div className="absolute inset-0 z-10 grid place-items-center bg-[var(--background)]/60">
                         <div className="w-12 h-12 border-4 border-[var(--border)] border-t-[var(--primary)] rounded-full animate-spin" />
                       </div>
                     )}
-                    <div className="relative w-full aspect-video overflow-hidden rounded-lg bg-[var(--muted)]">
+                    <div className="relative w-full aspect-video overflow-hidden rounded-lg bg-[var(--muted)] shrink-0">
                       <div
                         className="absolute inset-0 cursor-grab active:cursor-grabbing"
                         onPointerDown={(e)=>{ e.currentTarget.setPointerCapture(e.pointerId); barcodeCenterDrag.current = { x: e.clientX, y: e.clientY, start: { ...barcodeCenterOffset } }; }}
@@ -1247,102 +1247,145 @@ export default function addItemPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex flex-wrap items-center gap-3">
-                      <label className="text-sm text-[var(--muted-foreground)]">Zoom</label>
-                      <input type="range" min={0.5} max={3} step={0.01} value={barcodeCenterScale} onChange={(e)=> setBarcodeCenterScale(parseFloat(e.target.value))} className="flex-1" />
-                      <div className="flex items-center gap-2">
-                        <button type="button" onClick={()=> setBarcodeCenterRotate(r => (r - 90 + 360) % 360)} className="px-2 py-1 rounded-md border border-[var(--border)]">Rotate -90°</button>
-                        <button type="button" onClick={()=> setBarcodeCenterRotate(r => (r + 90) % 360)} className="px-2 py-1 rounded-md border border-[var(--border)]">Rotate +90°</button>
+
+                    {/* Row 1: Zoom Slider and percentage */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="font-semibold text-[var(--foreground)]">Zoom</span>
+                        <span className="text-[var(--muted-foreground)] font-medium">{Math.round(barcodeCenterScale * 100)}%</span>
                       </div>
-                      <button type="button" onClick={()=> { setBarcodeCenterScale(1); setBarcodeCenterOffset({x:0,y:0}); setBarcodeCenterRotate(0); }} className="px-3 py-1.5 rounded-md border border-[var(--border)] hover:bg-[var(--muted)]">Reset</button>
-                      <button type="button" disabled={barcodeBusy} onClick={async ()=>{
-                        if (scanAbortControllerRef.current) {
-                            scanAbortControllerRef.current.abort();
-                        }
-                        scanAbortControllerRef.current = new AbortController();
-                        const signal = scanAbortControllerRef.current.signal;
+                      <input
+                        type="range"
+                        min={0.5}
+                        max={3}
+                        step={0.01}
+                        value={barcodeCenterScale}
+                        onChange={(e)=> setBarcodeCenterScale(parseFloat(e.target.value))}
+                        className="w-full accent-[var(--primary)] h-1.5 bg-[var(--muted)] rounded-lg appearance-none cursor-pointer"
+                      />
+                    </div>
 
-                        setScanOverlay({ active: true, state: 'scanning', errorMsg: '' });
-                        setBarcodeBusy(true);
-                        try {
-                          // render a new aligned image into canvas for decode
-                          const img = new Image();
-                          const imgLoadPromise = new Promise((resolve, reject) => {
-                            img.onload = () => resolve(img);
-                            img.onerror = () => reject(new Error('Failed to load alignment image.'));
-                          });
-                          img.src = barcodeLastImage || '';
-                          
-                          await imgLoadPromise;
-                          if (signal.aborted) return;
-
-                          const W = 1280, H = 720; // wide canvas for barcode
-                          const canvas = document.createElement('canvas');
-                          canvas.width = W; canvas.height = H;
-                          const ctx = canvas.getContext('2d');
-                          ctx.fillStyle = '#fff';
-                          ctx.fillRect(0,0,W,H);
-                          ctx.save();
-                          ctx.translate(W/2 + barcodeCenterOffset.x, H/2 + barcodeCenterOffset.y);
-                          ctx.rotate((barcodeCenterRotate * Math.PI)/180);
-                          const iw = img.width * barcodeCenterScale;
-                          const ih = img.height * barcodeCenterScale;
-                          ctx.drawImage(img, -iw/2, -ih/2, iw, ih);
-                          ctx.restore();
-                          const aligned = canvas.toDataURL('image/png');
-                          const code = await decodeAny(aligned);
-                          if (signal.aborted) return;
-
-                          if (!code) {
-                            setScanOverlay({ active: true, state: 'error', errorMsg: 'No barcode detected after centering. Try adjusting zoom/position/rotation.' });
-                            return;
+                    {/* Row 2: Action Buttons */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={()=> setBarcodeCenterRotate(r => (r - 90 + 360) % 360)}
+                          className="px-4 py-2.5 text-sm font-semibold rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors shadow-sm flex items-center justify-center min-h-[44px]"
+                        >
+                          Rotate -90°
+                        </button>
+                        <button
+                          type="button"
+                          onClick={()=> setBarcodeCenterRotate(r => (r + 90) % 360)}
+                          className="px-4 py-2.5 text-sm font-semibold rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors shadow-sm flex items-center justify-center min-h-[44px]"
+                        >
+                          Rotate +90°
+                        </button>
+                        <button
+                          type="button"
+                          onClick={()=> { setBarcodeCenterScale(1); setBarcodeCenterOffset({x:0,y:0}); setBarcodeCenterRotate(0); }}
+                          className="px-4 py-2.5 text-sm font-semibold rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors shadow-sm flex items-center justify-center min-h-[44px]"
+                        >
+                          Reset
+                        </button>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={barcodeBusy}
+                        onClick={async ()=>{
+                          if (scanAbortControllerRef.current) {
+                              scanAbortControllerRef.current.abort();
                           }
+                          scanAbortControllerRef.current = new AbortController();
+                          const signal = scanAbortControllerRef.current.signal;
 
-                          setScanOverlay({ active: true, state: 'fetching', errorMsg: '' });
-                          const prod = await fetchProductByBarcode(code, signal);
-                          if (signal.aborted) return;
+                          setScanOverlay({ active: true, state: 'scanning', errorMsg: '' });
+                          setBarcodeBusy(true);
+                          try {
+                            // render a new aligned image into canvas for decode
+                            const img = new Image();
+                            const imgLoadPromise = new Promise((resolve, reject) => {
+                              img.onload = () => resolve(img);
+                              img.onerror = () => reject(new Error('Failed to load alignment image.'));
+                            });
+                            img.src = barcodeLastImage || '';
+                            
+                            await imgLoadPromise;
+                            if (signal.aborted) return;
 
-                          if (!prod) {
-                            setScanOverlay({ active: true, state: 'error', errorMsg: `No product info found for barcode ${code}.` });
-                            return;
-                          }
-                          let imgB64 = '';
-                          if (prod.img) { try { imgB64 = await fetchImageUrlToBase64(prod.img, signal); } catch {} }
-                          if (signal.aborted) return;
+                            const W = 1280, H = 720; // wide canvas for barcode
+                            const canvas = document.createElement('canvas');
+                            canvas.width = W; canvas.height = H;
+                            const ctx = canvas.getContext('2d');
+                            ctx.fillStyle = '#fff';
+                            ctx.fillRect(0,0,W,H);
+                            ctx.save();
+                            ctx.translate(W/2 + barcodeCenterOffset.x, H/2 + barcodeCenterOffset.y);
+                            ctx.rotate((barcodeCenterRotate * Math.PI)/180);
+                            const iw = img.width * barcodeCenterScale;
+                            const ih = img.height * barcodeCenterScale;
+                            ctx.drawImage(img, -iw/2, -ih/2, iw, ih);
+                            ctx.restore();
+                            const aligned = canvas.toDataURL('image/png');
+                            const code = await decodeAny(aligned);
+                            if (signal.aborted) return;
 
-                          let priceVal = prod.price;
-                          if (!priceVal && prod.img) {
-                            const hints = [prod.name, ...(prod.categories||[])].filter(Boolean).join(', ');
-                            priceVal = await estimatePriceFromImage(prod.img, hints, signal);
-                          }
-                          if (signal.aborted) return;
+                            if (!code) {
+                              setScanOverlay({ active: true, state: 'error', errorMsg: 'No barcode detected after centering. Try adjusting zoom/position/rotation.' });
+                              return;
+                            }
 
-                          setFormData(prev => ({
-                            ...prev,
-                            name: prod.name || prev.name,
-                            description: prod.desc || prev.description,
-                            category: Array.from(new Set([...(prev.category||[]), ...((prod.categories||[]))])),
-                            images: imgB64 ? [imgB64, ...(prev.images||[])] : prev.images,
-                            price: priceVal ? String(priceVal) : prev.price
-                          }));
-                          setActiveIndex(0);
-                          setBarcodeCenterOpen(false);
-                          setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
-                        } catch (err) {
-                          if (err.name === 'AbortError' || signal.aborted) {
-                            return;
+                            setScanOverlay({ active: true, state: 'fetching', errorMsg: '' });
+                            const prod = await fetchProductByBarcode(code, signal);
+                            if (signal.aborted) return;
+
+                            if (!prod) {
+                              setScanOverlay({ active: true, state: 'error', errorMsg: `No product info found for barcode ${code}.` });
+                              return;
+                            }
+                            let imgB64 = '';
+                            if (prod.img) { try { imgB64 = await fetchImageUrlToBase64(prod.img, signal); } catch {} }
+                            if (signal.aborted) return;
+
+                            let priceVal = prod.price;
+                            if (!priceVal && prod.img) {
+                              const hints = [prod.name, ...(prod.categories||[])].filter(Boolean).join(', ');
+                              priceVal = await estimatePriceFromImage(prod.img, hints, signal);
+                            }
+                            if (signal.aborted) return;
+
+                            setFormData(prev => ({
+                              ...prev,
+                              name: prod.name || prev.name,
+                              description: prod.desc || prev.description,
+                              category: Array.from(new Set([...(prev.category||[]), ...((prod.categories||[]))])),
+                              images: imgB64 ? [imgB64, ...(prev.images||[])] : prev.images,
+                              price: priceVal ? String(priceVal) : prev.price
+                            }));
+                            setActiveIndex(0);
+                            setBarcodeCenterOpen(false);
+                            setScanOverlay({ active: false, state: 'scanning', errorMsg: '' });
+                          } catch (err) {
+                            if (err.name === 'AbortError' || signal.aborted) {
+                              return;
+                            }
+                            setScanOverlay({ active: true, state: 'error', errorMsg: err.message || 'An error occurred during barcode scanning.' });
+                          } finally {
+                            if (!signal.aborted) {
+                              setBarcodeBusy(false);
+                            }
                           }
-                          setScanOverlay({ active: true, state: 'error', errorMsg: err.message || 'An error occurred during barcode scanning.' });
-                        } finally {
-                          if (!signal.aborted) {
-                            setBarcodeBusy(false);
-                          }
-                        }
-                      }} className="px-4 py-2 rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] disabled:opacity-60">{barcodeBusy ? 'Decoding…' : 'Apply & Decode'}</button>
+                        }}
+                        className="px-5 py-2.5 text-sm font-semibold rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed transition-all shadow-md flex items-center justify-center min-h-[44px] sm:w-auto w-full"
+                      >
+                        {barcodeBusy ? 'Decoding…' : 'Apply & Decode'}
+                      </button>
                     </div>
                   </div>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
 
             {scanOverlay.active && mounted && typeof window !== 'undefined' && createPortal(
