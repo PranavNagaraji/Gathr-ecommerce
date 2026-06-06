@@ -17,11 +17,11 @@ async function assertMerchant(clerkId) {
   return { user };
 }
 
-function buildPrompt(hints) {
+function buildPrompt(hints, hasImage) {
   const base = `You are assisting a merchant to create a product listing.
 Return STRICT JSON only with keys: name (string), description (string, 2-4 sentences), categories (array of strings, 1-3 entries), price (number in INR, reasonable starting MRP).
 Do not include markdown fences.
-Keep it accurate to the image. ${hints ? "Hints: " + hints : ""}`;
+${hasImage ? "Keep it accurate to the image. " : ""}Hints/Title: ${hints || ""}`;
   return base;
 }
 
@@ -72,25 +72,26 @@ export async function generateItemFromImage(req, res) {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return res.status(500).json({ message: "GEMINI_API_KEY not configured" });
 
-    let inline;
+    let inline = null;
     if (base64Image) {
       inline = { data: base64Image, mime: "image/png" };
     } else if (imageUrl) {
       inline = await fetchImageToBase64(imageUrl);
-    } else {
-      return res.status(400).json({ message: "Provide imageUrl or base64Image" });
+    } else if (!hints || !hints.trim()) {
+      return res.status(400).json({ message: "Provide imageUrl, base64Image, or hints" });
     }
 
     // Helper to call Gemini with a given prompt and generation config
     async function geminiGenerate(prompt, genCfg) {
+      const parts = [{ text: prompt }];
+      if (inline) {
+        parts.push({ inline_data: { mime_type: inline.mime, data: inline.data } });
+      }
       const body = {
         contents: [
           {
             role: "user",
-            parts: [
-              { text: prompt },
-              { inline_data: { mime_type: inline.mime, data: inline.data } },
-            ],
+            parts,
           },
         ],
         generationConfig: { ...genCfg },
@@ -108,7 +109,7 @@ export async function generateItemFromImage(req, res) {
     }
 
     // Try 1: normal prompt
-    const prompt1 = buildPrompt(hints);
+    const prompt1 = buildPrompt(hints, !!inline);
     let text = await geminiGenerate(prompt1, { temperature: 0.2, topP: 0.9, maxOutputTokens: 512 });
     let parsed = parseGeminiJSON(text);
     

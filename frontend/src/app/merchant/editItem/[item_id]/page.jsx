@@ -1,5 +1,6 @@
 'use client'
-import { useEffect, useState, useMemo } from "react" // 🔹 Added useMemo
+import { useEffect, useState, useMemo } from "react"
+import { createPortal } from "react-dom"
 import { useParams, useRouter } from "next/navigation"
 import { useUser, useAuth } from "@clerk/nextjs"
 import axios from "axios"
@@ -35,9 +36,24 @@ export default function EditItemPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const [aiLoading, setAiLoading] = useState(false)
+  const [showAiTitleModal, setShowAiTitleModal] = useState(false)
+  const [aiModalTitleInput, setAiModalTitleInput] = useState("")
+
   useEffect(() => {
     setMounted(true)
   }, [])
+
+  useEffect(() => {
+    if (showAiTitleModal) {
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
+    }
+    return () => {
+      document.body.style.overflow = "";
+    };
+  }, [showAiTitleModal]);
 
   const [isDuplicateTitle, setIsDuplicateTitle] = useState(false);
 
@@ -216,6 +232,70 @@ export default function EditItemPage() {
   const goNext = () => {
     setActiveIndex((prev) => (formData.images.length ? (prev + 1) % formData.images.length : 0))
   }
+
+  const handleGenerateAiClick = () => {
+    const currentTitle = formData.name.trim();
+    if (!currentTitle) {
+      setAiModalTitleInput('');
+      setShowAiTitleModal(true);
+    } else {
+      generateDescription(currentTitle);
+    }
+  };
+
+  const generateDescription = async (titleToUse) => {
+    if (!isLoaded || !isSignedIn || !user) return;
+    const toastId = toast.loading("AI generating item description...");
+    try {
+      setAiLoading(true);
+      const token = await getToken();
+      const first = formData.images && formData.images[0] || '';
+      const firstUrl = typeof first === 'object' ? (first.url || '') : first;
+      const base64 = firstUrl.includes(',') ? firstUrl.split(',')[1] : firstUrl;
+
+      const body = {
+        clerkId: user.id,
+        hints: titleToUse
+      };
+      if (base64) {
+        body.base64Image = base64;
+      }
+
+      let lastErr = null;
+      for (let attempt = 0; attempt < 2; attempt++) {
+        try {
+          const resp = await fetch(`${API_URL}/api/merchant/ai/generateFromImage`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify(body)
+          });
+          const data = await resp.json();
+          if (!resp.ok) throw new Error(data?.message || 'AI generation failed');
+          
+          setFormData(prev => ({
+            ...prev,
+            description: data?.description ?? prev.description,
+          }));
+          lastErr = null;
+          break;
+        } catch (err) {
+          lastErr = err;
+          await new Promise(r => setTimeout(r, 250));
+        }
+      }
+      if (lastErr) throw lastErr;
+      toast.success("AI description generated successfully!", { id: toastId });
+    } catch (e) {
+      const raw = String(e && e.message ? e.message : '');
+      const lower = raw.toLowerCase();
+      const friendly = lower.includes('model did not return expected json')
+          ? 'AI could not generate description right now. Please try again.'
+          : (raw ? `AI error: ${raw}` : 'AI error: Something went wrong.');
+      toast.error(friendly, { id: toastId });
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   // ... (handleSubmit logic is unchanged) ...
   const friendlyItemError = (data) => {
@@ -431,7 +511,24 @@ export default function EditItemPage() {
                 )}
               </div>
               <div>
-                <label className="text-sm font-medium text-[var(--muted-foreground)]">Description</label>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="text-sm font-medium text-[var(--muted-foreground)]">Description</label>
+                  <button
+                    type="button"
+                    onClick={handleGenerateAiClick}
+                    disabled={aiLoading}
+                    className={`text-xs px-2.5 py-1.5 rounded-md border border-[var(--border)] flex items-center gap-1.5 font-medium transition-all ${
+                      aiLoading
+                        ? 'opacity-50 cursor-not-allowed bg-[var(--muted)]'
+                        : 'hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
+                    }`}
+                  >
+                    <svg className="w-3.5 h-3.5 text-[var(--primary)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path>
+                    </svg>
+                    {aiLoading ? 'Generating…' : 'Generate with AI'}
+                  </button>
+                </div>
                 <textarea name="description" value={formData.description} onChange={handleChange} rows={4} className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-lg p-2 focus:outline-none focus:ring-0 focus:border-[var(--primary)] transition-colors" placeholder="Enter description" />
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
@@ -460,6 +557,47 @@ export default function EditItemPage() {
         </div>
       </div>
 
+      {showAiTitleModal && mounted && typeof window !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[20000] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
+          <div className="w-full max-w-sm bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+            <h3 className="text-lg font-bold text-[var(--foreground)]">Generate Description</h3>
+            <p className="text-sm text-[var(--muted-foreground)]">
+              Please enter a product title first to generate a description.
+            </p>
+            <input
+              type="text"
+              placeholder="Enter product title..."
+              value={aiModalTitleInput}
+              onChange={(e) => setAiModalTitleInput(e.target.value)}
+              className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all"
+            />
+            <div className="flex items-center justify-end gap-3 mt-2">
+              <button
+                type="button"
+                onClick={() => setShowAiTitleModal(false)}
+                className="px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={!aiModalTitleInput.trim()}
+                onClick={() => {
+                  const title = aiModalTitleInput.trim();
+                  if (title) {
+                    setShowAiTitleModal(false);
+                    generateDescription(title);
+                  }
+                }}
+                className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+              >
+                Generate
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </ConfigProvider>
   )
 }

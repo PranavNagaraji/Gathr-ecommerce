@@ -177,6 +177,8 @@ export default function addItemPage() {
     const [activeIndex, setActiveIndex] = useState(0)
     const [otherCategory, setOtherCategory] = useState("")
     const [aiLoading, setAiLoading] = useState(false)
+    const [showAiTitleModal, setShowAiTitleModal] = useState(false)
+    const [aiModalTitleInput, setAiModalTitleInput] = useState('')
     const [barcodeBusy, setBarcodeBusy] = useState(false)
     const barcodeFileRef = useRef(null)
     const folderInputRef = useRef(null)
@@ -199,7 +201,7 @@ export default function addItemPage() {
     const scanAbortControllerRef = useRef(null);
 
     useEffect(() => {
-        if (scanOverlay.active || barcodeCenterOpen) {
+        if (scanOverlay.active || barcodeCenterOpen || showAiTitleModal) {
             document.body.style.overflow = 'hidden';
         } else {
             document.body.style.overflow = '';
@@ -207,7 +209,7 @@ export default function addItemPage() {
         return () => {
             document.body.style.overflow = '';
         };
-    }, [scanOverlay.active, barcodeCenterOpen]);
+    }, [scanOverlay.active, barcodeCenterOpen, showAiTitleModal]);
 
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
@@ -689,34 +691,47 @@ export default function addItemPage() {
         setActiveIndex((prev) => (formData.images.length ? (prev + 1) % formData.images.length : 0))
     }
 
-    const handleGenerateAI = async () => {
-        if (!isLoaded || !isSignedIn || !user) return;
-        if (!formData.images || formData.images.length === 0) {
-            toast.error('Please upload at least one image first.');
-            return;
+    const handleGenerateAiClick = () => {
+        const currentTitle = formData.name.trim();
+        if (!currentTitle) {
+            setAiModalTitleInput('');
+            setShowAiTitleModal(true);
+        } else {
+            generateDescription(currentTitle);
         }
+    };
+
+    const generateDescription = async (titleToUse) => {
+        if (!isLoaded || !isSignedIn || !user) return;
         const toastId = toast.loading("AI generating item description...");
         try {
             setAiLoading(true);
             const token = await getToken();
-            const first = formData.images[0] || '';
+            const first = formData.images && formData.images[0] || '';
             const base64 = first.includes(',') ? first.split(',')[1] : first;
-            const hints = [formData.name, ...(formData.category||[])].filter(Boolean).join(', ');
+            
+            const body = {
+                clerkId: user.id,
+                hints: titleToUse
+            };
+            if (base64) {
+                body.base64Image = base64;
+            }
+
             let lastErr = null;
             for (let attempt = 0; attempt < 2; attempt++) {
                 try {
                     const resp = await fetch(`${API_URL}/api/merchant/ai/generateFromImage`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-                        body: JSON.stringify({ clerkId: user.id, base64Image: base64, hints })
+                        body: JSON.stringify(body)
                     });
                     const data = await resp.json();
                     if (!resp.ok) throw new Error(data?.message || 'AI generation failed');
+                    
                     setFormData(prev => ({
                         ...prev,
                         description: data?.description ?? prev.description,
-                        price: typeof data?.price === 'number' ? String(data.price) : prev.price,
-                        category: Array.from(new Set([...(prev.category||[]), ...((data?.categories||[]) )]))
                     }));
                     lastErr = null;
                     break;
@@ -732,12 +747,12 @@ export default function addItemPage() {
             const lower = raw.toLowerCase();
             const friendly = lower.includes('model did not return expected json')
                 ? 'AI could not generate description right now. Please try again.'
-                : (raw ? `AI error: ${raw}` : 'AI error: Something went wrong while generating description.');
+                : (raw ? `AI error: ${raw}` : 'AI error: Something went wrong.');
             toast.error(friendly, { id: toastId });
         } finally {
             setAiLoading(false);
         }
-    }
+    };
 
     const friendlyItemError = (data) => {
         const msg = typeof data?.error?.message === 'string' ? data.error.message : '';
@@ -910,10 +925,10 @@ export default function addItemPage() {
                                         <label className="text-sm font-semibold text-[var(--foreground)]">Description</label>
                                         <button
                                             type="button"
-                                            onClick={handleGenerateAI}
-                                            disabled={aiLoading || !(formData.images && formData.images.length)}
+                                            onClick={handleGenerateAiClick}
+                                            disabled={aiLoading}
                                             className={`text-xs px-2.5 py-1.5 rounded-md border border-[var(--border)] flex items-center gap-1.5 font-medium transition-all ${
-                                                aiLoading || !(formData.images && formData.images.length)
+                                                aiLoading
                                                     ? 'opacity-50 cursor-not-allowed bg-[var(--muted)]'
                                                     : 'hover:bg-[var(--muted)] hover:text-[var(--foreground)]'
                                             }`}
@@ -1410,6 +1425,48 @@ export default function addItemPage() {
                   >
                     {scanOverlay.state === 'error' ? 'Close' : 'Cancel'}
                   </button>
+                </div>
+              </div>,
+              document.body
+            )}
+
+            {showAiTitleModal && mounted && typeof window !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-[20000] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
+                <div className="w-full max-w-sm bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-2xl p-6 flex flex-col gap-4">
+                  <h3 className="text-lg font-bold text-[var(--foreground)]">Generate Description</h3>
+                  <p className="text-sm text-[var(--muted-foreground)]">
+                    Please enter a product title first to generate a description.
+                  </p>
+                  <input
+                    type="text"
+                    placeholder="Enter product title..."
+                    value={aiModalTitleInput}
+                    onChange={(e) => setAiModalTitleInput(e.target.value)}
+                    className="w-full px-4 py-2.5 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] placeholder:text-[var(--muted-foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all"
+                  />
+                  <div className="flex items-center justify-end gap-3 mt-2">
+                    <button
+                      type="button"
+                      onClick={() => setShowAiTitleModal(false)}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg border border-[var(--border)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors"
+                    >
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      disabled={!aiModalTitleInput.trim()}
+                      onClick={() => {
+                        const title = aiModalTitleInput.trim();
+                        if (title) {
+                          setShowAiTitleModal(false);
+                          generateDescription(title);
+                        }
+                      }}
+                      className="px-4 py-2 text-sm font-semibold rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                    >
+                      Generate
+                    </button>
+                  </div>
                 </div>
               </div>,
               document.body
