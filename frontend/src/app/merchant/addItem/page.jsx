@@ -1,11 +1,13 @@
 'use client'
 import { useState, useRef, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { useUser, useAuth } from "@clerk/nextjs";
 import { useRouter } from 'next/navigation';
 import axios from 'axios';
 import { Select, ConfigProvider, theme, Input as AntInput } from 'antd'
 import { useTheme } from '@/components/theme/ThemeProvider'
 import toast from 'react-hot-toast';
+import { MdQrCodeScanner } from 'react-icons/md';
 
 export default function addItemPage() {
     const { theme: currentTheme } = useTheme();
@@ -195,6 +197,17 @@ export default function addItemPage() {
     const barcodeCenterDrag = useRef(null)
     const [scanOverlay, setScanOverlay] = useState({ active: false, state: 'scanning', errorMsg: '' });
     const scanAbortControllerRef = useRef(null);
+
+    useEffect(() => {
+        if (scanOverlay.active) {
+            document.body.style.overflow = 'hidden';
+        } else {
+            document.body.style.overflow = '';
+        }
+        return () => {
+            document.body.style.overflow = '';
+        };
+    }, [scanOverlay.active]);
 
     const [mounted, setMounted] = useState(false);
     useEffect(() => {
@@ -832,31 +845,33 @@ export default function addItemPage() {
                     </div>
 
                     {/* Top Scan/Lookup Section */}
-                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm space-y-4">
-                        <div className="flex items-center gap-2 text-[var(--primary)] font-semibold text-lg">
-                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h.01M16 12h.01M21 12h.01M12 16h.01M12 20h.01M4 12h.01M4 4h16v16H4V4z"></path>
-                            </svg>
-                            <h2>Lookup via Barcode</h2>
+                    <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-4">
+                        <div className="flex items-center gap-2 text-[var(--primary)] font-semibold text-lg justify-center">
+                            <MdQrCodeScanner className="w-6 h-6 animate-pulse" />
+                            <h2>Barcode Scanner</h2>
                         </div>
-                        <div className="flex flex-col md:flex-row md:items-center gap-3">
-                            <div className="relative">
+                        <p className="text-sm text-[var(--muted-foreground)] text-center">
+                            Scan a new barcode to reload details.
+                        </p>
+                        <div className="flex flex-col gap-3">
+                            <div className="relative w-full">
                                 <button
                                     type="button"
                                     onClick={handleScanToggle}
                                     disabled={barcodeBusy || scanOverlay.active}
-                                    className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed font-medium transition-all ${scanOverlay.active ? '!bg-gray-400 !text-gray-200 dark:!bg-gray-700 dark:!text-gray-500' : ''}`}
+                                    className={`w-full inline-flex items-center justify-center gap-2 px-4 py-3 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed font-semibold transition-all ${scanOverlay.active ? '!bg-gray-400 !text-gray-200 dark:!bg-gray-700 dark:!text-gray-500' : ''}`}
                                 >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
-                                    {barcodeBusy ? 'Scanning…' : 'Scan Barcode'}
+                                    <MdQrCodeScanner className="w-5 h-5" />
+                                    {barcodeBusy ? 'Scanning…' : 'Scan Barcode / Choose Image'}
                                 </button>
                                 <input ref={barcodeFileRef} type="file" accept="image/*" className="hidden" onChange={(e) => onBarcodeImageChosen(e.target.files?.[0])} />
                             </div>
-                            <div className="flex-1 flex gap-2">
+                            
+                            <div className="flex gap-2">
                                 <input
                                     type="text"
                                     inputMode="numeric"
-                                    placeholder="Enter EAN/UPC barcode manually (e.g. 5900123456789)"
+                                    placeholder="Enter barcode number manually (e.g. 5900123...)"
                                     value={barcodeManual}
                                     disabled={barcodeBusy || scanOverlay.active}
                                     onChange={(e)=> setBarcodeManual(e.target.value)}
@@ -867,7 +882,7 @@ export default function addItemPage() {
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-start">
+                        <div className="grid grid-cols-1 md:grid-cols-5 gap-8 items-start">
                         {/* Details - LEFT (3/5) */}
                         <form onSubmit={handleSubmit} className="md:col-span-3 space-y-6">
                             {/* Card 1: Basic Information */}
@@ -1109,10 +1124,7 @@ export default function addItemPage() {
                                     onDragOver={handleDragOver}
                                     onDragLeave={handleDragLeave}
                                     onDrop={handleDrop}
-                                    onClick={(e) => {
-                                        if (e.target.closest('.camera-btn')) return;
-                                        handleFolderUploadClick();
-                                    }}
+                                    onClick={handleFolderUploadClick}
                                     className={`border-2 border-dashed rounded-xl p-5 text-center cursor-pointer transition-all flex flex-col items-center justify-center gap-3 ${
                                         isDragging
                                             ? 'border-[var(--primary)] bg-[var(--primary)]/5'
@@ -1141,20 +1153,6 @@ export default function addItemPage() {
                                             className="px-3 py-1.5 text-xs font-semibold rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors shadow-sm"
                                         >
                                             Choose from folder
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleCameraUploadClick();
-                                            }}
-                                            className="camera-btn px-3 py-1.5 text-xs font-semibold rounded-md bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 transition-opacity flex items-center gap-1.5 shadow-sm"
-                                        >
-                                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z"></path>
-                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z"></path>
-                                            </svg>
-                                            Use Camera
                                         </button>
                                     </div>
                                 </div>
@@ -1347,46 +1345,20 @@ export default function addItemPage() {
               </div>
             )}
 
-            {scanOverlay.active && (
-              <div className="fixed inset-0 z-[20000] bg-black/75 flex flex-col items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
-                <div className="w-[90vw] max-w-md bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-2xl p-6 flex flex-col items-center gap-6">
-                  {/* Status Indicator */}
-                  {scanOverlay.state === 'scanning' && (
-                    <div className="flex flex-col items-center gap-4 text-center">
-                      <div className="relative w-16 h-16 flex items-center justify-center">
-                        <div className="absolute inset-0 rounded-full border-4 border-t-[var(--primary)] border-[var(--border)] animate-spin" />
-                        <svg className="w-8 h-8 text-[var(--primary)] animate-pulse" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h.01M16 12h.01M21 12h.01M12 16h.01M12 20h.01M4 12h.01M4 4h16v16H4V4z" />
-                        </svg>
-                      </div>
-                      <p className="text-lg font-semibold text-[var(--foreground)] animate-pulse">Scanning barcode…</p>
-                    </div>
-                  )}
-
-                  {scanOverlay.state === 'fetching' && (
-                    <div className="flex flex-col items-center gap-4 text-center">
-                      <div className="relative w-16 h-16 flex items-center justify-center">
-                        <div className="absolute inset-0 rounded-full border-4 border-[var(--primary)] border-t-transparent animate-spin animate-pulse" />
-                        <svg className="w-8 h-8 text-[var(--primary)] animate-bounce" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
-                        </svg>
-                      </div>
-                      <p className="text-lg font-semibold text-[var(--foreground)] animate-pulse">Fetching item details…</p>
-                    </div>
-                  )}
-
-                  {scanOverlay.state === 'error' && (
-                    <div className="flex flex-col items-center gap-4 text-center">
-                      <div className="w-16 h-16 rounded-full bg-red-100 dark:bg-red-900/30 flex items-center justify-center text-red-600 dark:text-red-400">
-                        <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                        </svg>
-                      </div>
-                      <p className="text-lg font-semibold text-[var(--foreground)]">Scan Failed</p>
-                      <p className="text-sm text-[var(--muted-foreground)] max-h-32 overflow-y-auto px-2">{scanOverlay.errorMsg}</p>
-                    </div>
-                  )}
-
+            {scanOverlay.active && mounted && typeof window !== 'undefined' && createPortal(
+              <div className="fixed inset-0 z-[20000] bg-black/75 flex items-center justify-center p-4 backdrop-blur-sm pointer-events-auto">
+                <div className="w-[90vw] max-w-sm bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl shadow-2xl p-8 flex flex-col items-center gap-6 text-center">
+                  
+                  {/* Pulsing Scanner Icon */}
+                  <MdQrCodeScanner className="w-16 h-16 text-[var(--primary)] animate-pulse" />
+                  
+                  {/* Status / Message Text */}
+                  <p className="text-lg font-semibold text-[var(--foreground)] animate-pulse">
+                    {scanOverlay.state === 'scanning' && 'Scanning barcode…'}
+                    {scanOverlay.state === 'fetching' && 'Fetching item details…'}
+                    {scanOverlay.state === 'error' && (scanOverlay.errorMsg || 'Scan failed')}
+                  </p>
+                  
                   {/* Cancel / Close Button */}
                   <button
                     type="button"
@@ -1396,7 +1368,8 @@ export default function addItemPage() {
                     {scanOverlay.state === 'error' ? 'Close' : 'Cancel'}
                   </button>
                 </div>
-              </div>
+              </div>,
+              document.body
             )}
           </ConfigProvider>
     );
