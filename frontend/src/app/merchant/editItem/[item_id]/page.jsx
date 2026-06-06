@@ -44,6 +44,31 @@ export default function EditItemPage() {
     setMounted(true)
   }, [])
 
+  const [hasShop, setHasShop] = useState(null);
+  useEffect(() => {
+    if (!isLoaded || !isSignedIn || !user) return;
+    (async () => {
+      try {
+        const token = await getToken();
+        const res = await fetch(`${API_URL}/api/merchant/check_shop_exists`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ owner_id: user.id }),
+        });
+        setHasShop(res.ok);
+      } catch {
+        setHasShop(false);
+      }
+    })();
+  }, [user, isLoaded, isSignedIn, API_URL, getToken]);
+
+  useEffect(() => {
+    if (hasShop === false) {
+      toast.error("Please set up your shop first before editing items.", { duration: 4000 });
+      router.push('/merchant/createShop');
+    }
+  }, [hasShop]);
+
   useEffect(() => {
     if (showAiTitleModal) {
       document.body.style.overflow = "hidden";
@@ -386,6 +411,19 @@ export default function EditItemPage() {
       </div>
     </div>
   )
+
+  if (hasShop === null) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-full border-4 border-[var(--primary)] border-t-transparent animate-spin" />
+          <p className="text-[var(--muted-foreground)] text-sm animate-pulse">Checking shop...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (hasShop === false) return null;
 
   // 🔹 Skeleton loading state
   if (loading) return (

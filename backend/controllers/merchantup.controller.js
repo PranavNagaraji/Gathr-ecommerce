@@ -101,11 +101,17 @@ export const updateItem = async (req, res) => {
             return res.status(403).json({ message: "Unauthorized: Only merchants can update items" });
         }
 
-        const {data:shop_id} = await supabase
+        const { data: shopData, error: shopError } = await supabase
             .from("Shops")
             .select("id")
             .eq("owner_id", user.id)
             .single();
+
+        if (shopError || !shopData) {
+            return res.status(404).json({ message: "Shop not found for this user. Create a shop first." });
+        }
+
+        const shop_id = shopData;
 
         const parsedQuantity = (quantity === "" || quantity === undefined || quantity === null) ? null : (isNaN(parseInt(quantity, 10)) ? null : parseInt(quantity, 10));
         const parsedPrice = (price === "" || price === undefined || price === null) ? null : (isNaN(parseFloat(price)) ? null : parseFloat(price));

@@ -1,9 +1,10 @@
 'use client'
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button, Typography } from "@mui/material";
-import { Select, ConfigProvider } from 'antd';
+import { Select, ConfigProvider, theme } from 'antd';
 import { useUser, useAuth } from "@clerk/nextjs";
 import { useRouter } from 'next/navigation';
+import { useTheme } from '@/components/theme/ThemeProvider';
 import AddressMapPicker from '@/components/shared/AddressMapPicker';
 
 const CATEGORIES = [
@@ -16,6 +17,9 @@ export default function CreateShop() {
   const { user } = useUser();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
   const router = useRouter();
+  const { theme: currentTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { setMounted(true); }, []);
 
   const [formData, setFormData] = useState({
     shop_name: "", address: "", contact: "",
@@ -67,19 +71,45 @@ export default function CreateShop() {
     if (res.ok) router.push('/merchant/dashboard');
   };
 
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-10 h-10 rounded-full border-4 border-[var(--primary)] border-t-transparent animate-spin" />
+          <p className="text-[var(--muted-foreground)] text-sm animate-pulse">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <ConfigProvider
       theme={{
+        algorithm: currentTheme === 'dark' ? theme.darkAlgorithm : theme.defaultAlgorithm,
         token: {
+          colorPrimary: 'var(--primary)',
+          colorBgBase: 'var(--background)',
           colorBgContainer: 'var(--card)',
           colorText: 'var(--foreground)',
           colorTextPlaceholder: 'var(--muted-foreground)',
           colorBorder: 'var(--border)',
-          optionSelectedBg: 'var(--accent)',
-          optionSelectedColor: 'var(--accent-foreground)',
-          optionActiveBg: 'var(--muted)',
-          controlItemBgHover: 'var(--muted)',
           colorBgElevated: 'var(--popover)',
+          borderRadius: 8,
+        },
+        components: {
+          Select: {
+            colorBgContainer: 'var(--card)',
+            colorBgElevated: 'var(--popover)',
+            colorText: 'var(--foreground)',
+            colorTextPlaceholder: 'var(--muted-foreground)',
+            colorBorder: 'var(--border)',
+            optionSelectedBg: 'var(--accent)',
+            optionSelectedColor: 'var(--accent-foreground)',
+            optionActiveBg: 'var(--muted)',
+            controlItemBgHover: 'var(--muted)',
+            controlHeight: 48,
+            borderRadius: 8,
+          },
         }
       }}
     >
@@ -92,86 +122,114 @@ export default function CreateShop() {
             {/* ── Left: Form ── */}
             <form onSubmit={handleSubmit} className="md:col-span-3 flex flex-col gap-6">
 
-              {/* Basic fields */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                {['shop_name', 'contact', 'account_no', 'mobile_no'].map((field) => {
-                  const isRequired = ['shop_name', 'account_no', 'mobile_no'].includes(field);
-                  const label = field === 'account_no'
-                    ? 'ACCOUNT NUMBER *'
-                    : field === 'mobile_no'
-                    ? 'MOBILE NUMBER *'
-                    : field === 'shop_name'
-                    ? 'SHOP NAME *'
-                    : field.replace(/_/g, ' ').toUpperCase();
-                  return (
-                    <div key={field}>
-                      <Typography variant="subtitle2" sx={{ color: 'var(--muted-foreground)', fontWeight: 600, mb: 0.5 }}>
-                        {label}
-                      </Typography>
-                      <input
-                        type="text"
-                        name={field}
-                        value={formData[field] || ''}
-                        onChange={(e) => {
-                          handleChange(e);
-                          if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
-                        }}
-                        required={isRequired}
-                        inputMode={['account_no', 'mobile_no'].includes(field) ? 'numeric' : 'text'}
-                        className={`w-full bg-transparent border-b-2 text-[var(--foreground)] text-base p-2 focus:outline-none transition-colors ${
-                          fieldErrors[field] ? 'border-red-500 focus:border-red-500' : 'border-[var(--border)] focus:border-[var(--ring)]'
-                        }`}
-                      />
-                      {fieldErrors[field] && (
-                        <p className="text-red-500 text-xs mt-1">{fieldErrors[field]}</p>
-                      )}
+              {/* Basic fields ── Card */}
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-6">
+                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Shop Details</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {['shop_name', 'contact', 'account_no', 'mobile_no'].map((field) => {
+                    const isRequired = ['shop_name', 'account_no', 'mobile_no'].includes(field);
+                    const label = field === 'account_no'
+                      ? 'Account Number *'
+                      : field === 'mobile_no'
+                      ? 'Mobile Number *'
+                      : field === 'shop_name'
+                      ? 'Shop Name *'
+                      : field.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+                    return (
+                      <div key={field}>
+                        <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">
+                          {label}
+                        </label>
+                        <input
+                          type="text"
+                          name={field}
+                          value={formData[field] || ''}
+                          onChange={(e) => {
+                            handleChange(e);
+                            if (fieldErrors[field]) setFieldErrors(prev => ({ ...prev, [field]: '' }));
+                          }}
+                          required={isRequired}
+                          inputMode={['account_no', 'mobile_no'].includes(field) ? 'numeric' : 'text'}
+                          className={`w-full rounded-lg border text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all ${
+                            fieldErrors[field] ? 'border-red-500 bg-red-500/5' : 'border-[var(--border)] bg-[var(--background)]'
+                          }`}
+                        />
+                        {fieldErrors[field] && (
+                          <p className="text-red-500 text-xs mt-1">{fieldErrors[field]}</p>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Categories ── Card */}
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-6">
+                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Categories</h2>
+                <div>
+                  <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">Product Categories</label>
+                  <Select
+                    mode="multiple"
+                    value={formData.category}
+                    onChange={(values) => setFormData(p => ({ ...p, category: values }))}
+                    style={{ width: '100%' }}
+                    placeholder="Select categories"
+                    maxTagCount="responsive"
+                    size="large"
+                    popupClassName="!bg-[var(--popover)]"
+                    options={CATEGORIES.map(v => ({ value: v, label: v }))}
+                  />
+                  {formData.category?.includes('Other') && (
+                    <div className="mt-3">
+                      <label className="text-sm font-semibold text-[var(--foreground)] mb-2 block">Custom Category Name</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          value={otherCategory}
+                          onChange={(e) => setOtherCategory(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              e.preventDefault();
+                              const val = otherCategory.trim();
+                              if (val) {
+                                setFormData(p => ({
+                                  ...p,
+                                  category: [...new Set(p.category.filter(c => c !== 'Other').concat(val))]
+                                }));
+                                setOtherCategory('');
+                              }
+                            }
+                          }}
+                          placeholder="Type a custom category"
+                          className="flex-1 rounded-lg border border-[var(--border)] bg-[var(--background)] text-[var(--foreground)] p-3 text-base focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20 focus:border-[var(--primary)] transition-all placeholder:text-[var(--muted-foreground)]"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const val = otherCategory.trim();
+                            if (val) {
+                              setFormData(p => ({
+                                ...p,
+                                category: [...new Set(p.category.filter(c => c !== 'Other').concat(val))]
+                              }));
+                              setOtherCategory('');
+                            }
+                          }}
+                          disabled={!otherCategory.trim()}
+                          className="px-4 py-3 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-all"
+                        >
+                          Add
+                        </button>
+                      </div>
                     </div>
-                  );
-                })}
+                  )}
+                </div>
               </div>
 
-              {/* Categories */}
-              <div>
-                <Typography variant="subtitle2" sx={{ color: 'var(--muted-foreground)', fontWeight: 600, mb: 0.5 }}>
-                  CATEGORIES
-                </Typography>
-                <Select
-                  mode="multiple"
-                  value={formData.category}
-                  onChange={(values) => setFormData(p => ({ ...p, category: values }))}
-                  style={{ width: '100%' }}
-                  placeholder="Select categories"
-                  maxTagCount="responsive"
-                  size="large"
-                  styles={{ popup: { root: { background: 'var(--popover)', color: 'var(--popover-foreground)' } } }}
-                  options={CATEGORIES.map(v => ({ value: v, label: v }))}
-                />
-                {formData.category?.includes('Other') && (
-                  <div className="mt-3">
-                    <input
-                      type="text"
-                      value={otherCategory}
-                      onChange={(e) => setOtherCategory(e.target.value)}
-                      onBlur={() => {
-                        if (otherCategory.trim()) {
-                          setFormData(p => ({
-                            ...p,
-                            category: p.category.filter(c => c !== 'Other').concat(otherCategory.trim()),
-                          }));
-                          setOtherCategory('');
-                        }
-                      }}
-                      placeholder="Type custom category and press Tab"
-                      className="w-full bg-transparent border-b-2 border-[var(--border)] text-[var(--foreground)] text-base p-2 focus:outline-none focus:border-[var(--ring)]"
-                    />
-                  </div>
-                )}
-              </div>
-
-              {/* Image upload */}
-              <div>
-                <label className="text-sm font-medium mb-2 block text-[var(--muted-foreground)]">Shop Image</label>
-                <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--card)] overflow-hidden">
+              {/* Image upload ── Card */}
+              <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm space-y-6">
+                <h2 className="text-lg font-bold border-b border-[var(--border)] pb-3">Shop Image</h2>
+                <div className="w-full rounded-xl border border-[var(--border)] bg-[var(--background)] overflow-hidden">
                   <div className="relative aspect-video w-full">
                     {formData.image
                       ? <img src={formData.image} alt="Shop" className="w-full h-full object-cover" />
@@ -190,7 +248,7 @@ export default function CreateShop() {
                 </div>
                 <label
                   htmlFor="shop-image-upload"
-                  className="mt-3 inline-flex items-center gap-2 py-2 px-4 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] font-medium cursor-pointer transition-colors"
+                  className="inline-flex items-center gap-2 py-2.5 px-4 rounded-lg bg-[var(--muted)] text-[var(--muted-foreground)] hover:bg-[var(--accent)] hover:text-[var(--accent-foreground)] font-medium cursor-pointer transition-colors"
                 >
                   Upload Image
                 </label>

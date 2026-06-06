@@ -221,6 +221,31 @@ export default function addItemPage() {
         };
     }, []);
 
+    const [hasShop, setHasShop] = useState(null);
+    useEffect(() => {
+        if (!isLoaded || !isSignedIn || !user) return;
+        (async () => {
+            try {
+                const token = await getToken();
+                const res = await fetch(`${API_URL}/api/merchant/check_shop_exists`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+                    body: JSON.stringify({ owner_id: user.id }),
+                });
+                setHasShop(res.ok);
+            } catch {
+                setHasShop(false);
+            }
+        })();
+    }, [user, isLoaded, isSignedIn, API_URL, getToken]);
+
+    useEffect(() => {
+        if (hasShop === false) {
+            toast.error("Please set up your shop first before adding items.", { duration: 4000 });
+            router.push('/merchant/createShop');
+        }
+    }, [hasShop]);
+
     const handleCancelScan = () => {
         if (scanAbortControllerRef.current) {
             scanAbortControllerRef.current.abort();
@@ -813,7 +838,7 @@ export default function addItemPage() {
         }
     };
 
-    if (!mounted) {
+    if (!mounted || hasShop === null) {
         return (
             <div className="min-h-screen bg-[var(--background)] flex items-center justify-center">
                 <div className="flex flex-col items-center gap-3">
@@ -823,6 +848,8 @@ export default function addItemPage() {
             </div>
         );
     }
+
+    if (hasShop === false) return null;
 
     return (
         <ConfigProvider
