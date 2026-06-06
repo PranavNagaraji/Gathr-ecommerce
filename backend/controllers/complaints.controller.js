@@ -1,4 +1,5 @@
 import supabase from "../db.js";
+import { sendEmail } from "../utils/mailer.js";
 
 export const createComplaint = async (req, res) => {
   try {
@@ -20,6 +21,34 @@ export const createComplaint = async (req, res) => {
       .select("*")
       .single();
     if (error) return res.status(500).json({ message: "Failed to create complaint", error: error.message });
+
+    // Send unified notification email to admin
+    try {
+      const adminEmail = process.env.ADMIN_CONTACT_EMAIL || process.env.SMTP_USER;
+      if (adminEmail) {
+        const emailSubject = `New Contact Form Submission from ${name || "Anonymous"}`;
+        const emailHtml = `
+          <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:600px;margin:0 auto;padding:20px;border:1px solid #e0e0e0;border-radius:8px;color:#111">
+            <h2 style="color:#111;margin:0 0 16px;font-size:20px;border-bottom:1px solid #eee;padding-bottom:10px">New Contact Submission Received</h2>
+            <p style="margin:6px 0;font-size:14px"><strong>Name:</strong> ${name || "Anonymous"}</p>
+            <p style="margin:6px 0;font-size:14px"><strong>Email:</strong> ${email || "Not provided"}</p>
+            <p style="margin:6px 0;font-size:14px"><strong>Clerk ID:</strong> ${user_clerk_id || "Guest"}</p>
+            <hr style="border:0;border-top:1px solid #eee;margin:16px 0" />
+            <p style="margin:0 0 8px;font-size:14px"><strong>Message:</strong></p>
+            <blockquote style="margin:0;padding:12px 16px;background:#f5f5f5;border-left:4px solid #111;font-style:italic;font-size:14px;white-space:pre-wrap;border-radius:0 4px 4px 0">${message}</blockquote>
+          </div>
+        `;
+        await sendEmail({
+          to: adminEmail,
+          subject: emailSubject,
+          html: emailHtml
+        });
+        console.log(`[Complaints] Admin notification email sent successfully to ${adminEmail}`);
+      }
+    } catch (mailErr) {
+      console.error("[Complaints] Failed to send admin email notification:", mailErr.message);
+    }
+
     return res.status(201).json({ complaint: data });
   } catch (e) {
     return res.status(500).json({ message: "Internal server error" });

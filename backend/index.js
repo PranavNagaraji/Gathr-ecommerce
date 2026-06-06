@@ -178,6 +178,40 @@ async function ensureWishlistSchema() {
   }
 }
 
+async function ensureComplaintsSchema() {
+  const { SUPABASE_DB_URL } = process.env;
+  if (!SUPABASE_DB_URL) {
+    console.warn("[ensureComplaintsSchema] SUPABASE_DB_URL not set; skipping migration");
+    return;
+  }
+  const pool = new pg.Pool({ connectionString: SUPABASE_DB_URL, max: 1 });
+  const sql = `
+  create table if not exists public."Complaints" (
+    id bigserial primary key,
+    user_clerk_id text,
+    name text,
+    email text,
+    message text not null,
+    status text default 'open',
+    created_at timestamptz default now()
+  );
+  alter table public."Complaints" disable row level security;`;
+  const client = await pool.connect();
+  try {
+    await client.query('begin');
+    await client.query(sql);
+    await client.query('commit');
+    console.log('[ensureComplaintsSchema] Complaints schema ensured');
+  } catch (e) {
+    await client.query('rollback');
+    console.error('[ensureComplaintsSchema] migration failed:', e.message);
+  } finally {
+    client.release();
+    await pool.end();
+  }
+}
+
 ensureWishlistSchema();
+ensureComplaintsSchema();
 
 server.listen(5000, () => console.log("Backend + Socket.IO running on http://localhost:5000"));
