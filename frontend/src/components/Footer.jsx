@@ -68,10 +68,7 @@ export default function Footer() {
           </h3>
           <ul className="space-y-2 text-sm">
             {[
-              "123cs0004@iitk.ac.in",
-              "123cs0011@iitk.ac.in",
-              "123cs0052@iitk.ac.in",
-              "123cs0058@iitk.ac.in",
+              "pranavnagaraji22@gmail.com",
             ].map((email) => (
               <li key={email}>
                 <Link
