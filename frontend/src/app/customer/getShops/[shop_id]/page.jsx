@@ -36,7 +36,6 @@ function ShopItemsContent() {
   const defaultFilters = {
     categories: [],
     priceRange: [0, 1000000],
-    inStock: false,
     sortBy: "featured",
     rating: 0,
   };
@@ -53,25 +52,21 @@ function ShopItemsContent() {
   const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [categories, setCategories] = useState([]);
-  const [sliderMaxCap, setSliderMaxCap] = useState(1000000);
 
   const formatCurrency = (value) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(value);
   const isFilterActive = (filterState) =>
     (filterState.categories?.length || 0) > 0
     || filterState.rating > 0
-    || filterState.inStock
     || filterState.priceRange?.[0] !== 0
     || filterState.priceRange?.[1] !== 1000000;
   const appliedFilterCount = [
     appliedFilters.categories.length > 0 ? 1 : 0,
     appliedFilters.rating > 0 ? 1 : 0,
-    appliedFilters.inStock ? 1 : 0,
     appliedFilters.priceRange[0] !== 0 || appliedFilters.priceRange[1] !== 1000000 ? 1 : 0,
   ].reduce((sum, value) => sum + value, 0);
   const hasAppliedFilters = isFilterActive(appliedFilters);
 
   // Get unique values for filters
-  const priceMin = 0;
   const ratings = [4, 3, 2, 1];
   const sortOptions = [
     { value: "featured", label: "Featured" },
@@ -91,7 +86,6 @@ function ShopItemsContent() {
     setFilters(defaultFilters);
     setAppliedFilters(defaultFilters);
     setCategories([]);
-    setSliderMaxCap(1000000);
   }, [shop_id]);
 
   const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
@@ -145,7 +139,6 @@ function ShopItemsContent() {
             if (typeof appliedFilters.priceRange?.[0] === 'number') qs.set('minPrice', String(appliedFilters.priceRange[0]));
             if (typeof appliedFilters.priceRange?.[1] === 'number') qs.set('maxPrice', String(appliedFilters.priceRange[1]));
           }
-          if (appliedFilters.inStock) qs.set('inStock', 'true');
           if (appliedFilters.rating > 0) qs.set('rating', String(appliedFilters.rating));
           if (appliedFilters.sortBy) qs.set('sort', appliedFilters.sortBy);
           setLoading(true);
@@ -219,7 +212,6 @@ function ShopItemsContent() {
           if (typeof appliedFilters.priceRange?.[0] === 'number') qs.set('minPrice', String(appliedFilters.priceRange[0]));
           if (typeof appliedFilters.priceRange?.[1] === 'number') qs.set('maxPrice', String(appliedFilters.priceRange[1]));
         }
-        if (appliedFilters.inStock) qs.set('inStock', 'true');
         if (appliedFilters.rating > 0) qs.set('rating', String(appliedFilters.rating));
         if (appliedFilters.sortBy) qs.set('sort', appliedFilters.sortBy);
 
@@ -240,14 +232,6 @@ function ShopItemsContent() {
         setCategories(Array.from(allCategories).sort());
 
         if (alive && fetchedItems.length > 0 && !didInitPriceRange) {
-          const maxPrice = Math.ceil(Math.max(...fetchedItems.map(item => item.price || 0)) / 500) * 500;
-          const nextUpper = Math.max(maxPrice || 0, 1000000);
-          setFilters(prev => {
-            const curUpper = Array.isArray(prev.priceRange) ? prev.priceRange[1] : undefined;
-            if (curUpper === nextUpper) return prev;
-            return { ...prev, priceRange: [prev.priceRange?.[0] ?? 0, nextUpper] };
-          });
-          setSliderMaxCap(nextUpper);
           setDidInitPriceRange(true);
         }
       } catch (err) {
@@ -266,7 +250,7 @@ function ShopItemsContent() {
       alive = false;
       clearTimeout(delay);
     };
-  }, [user, isLoaded, isSignedIn, getToken, shop_id, page, limit, search, filters.categories, filters.priceRange, filters.inStock, filters.rating, filters.sortBy, API_URL, didInitPriceRange]);
+  }, [user, isLoaded, isSignedIn, getToken, shop_id, page, limit, search, appliedFilters.categories, appliedFilters.priceRange, appliedFilters.rating, appliedFilters.sortBy, API_URL, didInitPriceRange]);
 
   useEffect(() => {
     const loadWishlist = async () => {
@@ -292,7 +276,7 @@ function ShopItemsContent() {
 
   useEffect(() => {
     setPage(1);
-  }, [search, filters.categories, filters.priceRange, filters.inStock, filters.rating, filters.sortBy]);
+  }, [search, appliedFilters.categories, appliedFilters.priceRange, appliedFilters.rating, appliedFilters.sortBy]);
 
   const displayedItems = items;
   const showingStart = total ? (page - 1) * limit + 1 : 0;
@@ -552,7 +536,10 @@ function ShopItemsContent() {
                   id="sort-by"
                   value={filters.sortBy}
                   label="Sort by"
-                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+                  onChange={(e) => {
+                    setFilters({ ...filters, sortBy: e.target.value });
+                    setAppliedFilters(prev => ({ ...prev, sortBy: e.target.value }));
+                  }}
                   sx={{ borderRadius: '9999px', color: 'var(--foreground)' }}
                   MenuProps={{
                     PaperProps: {
@@ -585,7 +572,7 @@ function ShopItemsContent() {
                 transition={{ duration: 0.25, ease: 'easeOut' }}
                 className={`bg-[var(--card)] rounded-xl p-6 shadow-sm overflow-hidden ${hasAppliedFilters ? 'border-[var(--primary)] ring-1 ring-[var(--primary)]/10' : 'border border-[var(--border)]'}`}
               >
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   {/* Category Filter (multi-select) */}
                   <div>
                     <h3 className="font-medium mb-3 text-[var(--foreground)]">Categories</h3>
@@ -614,46 +601,172 @@ function ShopItemsContent() {
 
                   {/* Price Range Filter */}
                   <div>
-                    <h3 className="font-medium mb-3 text-[var(--foreground)]">
-                      Price Range: ₹{formatCurrency(filters.priceRange[0])} - ₹{formatCurrency(filters.priceRange[1])}
-                    </h3>
-                    <div className="px-2">
+                    <h3 className="font-medium mb-4 text-[var(--foreground)]">Price Range</h3>
+                    <style>{`
+                      .dual-range-slider {
+                        position: relative;
+                        height: 6px;
+                        background: var(--muted);
+                        border-radius: 3px;
+                        margin: 0.75rem 0 1.5rem;
+                      }
+                      .dual-range-slider-fill {
+                        position: absolute;
+                        height: 100%;
+                        background: var(--primary);
+                        border-radius: 3px;
+                        pointer-events: none;
+                        top: 0;
+                      }
+                      .dual-range-slider input[type='range'] {
+                        position: absolute;
+                        width: 100%;
+                        height: 6px;
+                        top: 0;
+                        background: none;
+                        pointer-events: none;
+                        -webkit-appearance: none;
+                        appearance: none;
+                        z-index: 5;
+                      }
+                      .dual-range-slider input[type='range']::-webkit-slider-thumb {
+                        -webkit-appearance: none;
+                        appearance: none;
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 50%;
+                        background: var(--primary);
+                        cursor: grab;
+                        pointer-events: auto;
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                        border: 3px solid var(--card);
+                        transition: all 0.2s ease;
+                      }
+                      .dual-range-slider input[type='range']::-webkit-slider-thumb:hover {
+                        box-shadow: 0 0 12px var(--primary), 0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 1px var(--primary);
+                        transform: scale(1.1);
+                        cursor: grab;
+                      }
+                      .dual-range-slider input[type='range']::-webkit-slider-thumb:active {
+                        cursor: grabbing;
+                      }
+                      .dual-range-slider input[type='range']:focus {
+                        outline: none;
+                      }
+                      .dual-range-slider input[type='range']:focus::-webkit-slider-thumb {
+                        box-shadow: 0 0 16px var(--primary), 0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 2px var(--primary);
+                        transform: scale(1.15);
+                      }
+                      .dual-range-slider input[type='range']::-moz-slider-thumb {
+                        width: 20px;
+                        height: 20px;
+                        border-radius: 50%;
+                        background: var(--primary);
+                        cursor: grab;
+                        border: 3px solid var(--card);
+                        box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+                        transition: all 0.2s ease;
+                      }
+                      .dual-range-slider input[type='range']::-moz-slider-thumb:hover {
+                        box-shadow: 0 0 12px var(--primary), 0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 1px var(--primary);
+                        transform: scale(1.1);
+                        cursor: grab;
+                      }
+                      .dual-range-slider input[type='range']::-moz-slider-thumb:active {
+                        cursor: grabbing;
+                      }
+                      .dual-range-slider input[type='range']:focus::-moz-slider-thumb {
+                        box-shadow: 0 0 16px var(--primary), 0 2px 6px rgba(0,0,0,0.3), inset 0 0 0 2px var(--primary);
+                        transform: scale(1.15);
+                      }
+                      .dual-range-slider input[type='range']::-moz-range-track,
+                      .dual-range-slider input[type='range']::-moz-range-progress {
+                        background: transparent;
+                        border: none;
+                      }
+                      .dual-range-slider input.min-slider {
+                        z-index: 5;
+                      }
+                      .dual-range-slider input.max-slider {
+                        z-index: 6;
+                      }
+                      .range-value-display {
+                        text-align: center;
+                        color: var(--foreground);
+                        font-weight: 600;
+                        font-size: 0.9rem;
+                        margin-bottom: 0.75rem;
+                        letter-spacing: 0.3px;
+                      }
+                    `}</style>
+                    <div className="range-value-display">
+                      ₹{formatCurrency(filters.priceRange[0])} — ₹{formatCurrency(filters.priceRange[1])}
+                    </div>
+                    <div className="dual-range-slider">
+                      <div
+                        className="dual-range-slider-fill"
+                        style={{
+                          left: `${(filters.priceRange[0] / 1000000) * 100}%`,
+                          right: `${100 - (filters.priceRange[1] / 1000000) * 100}%`,
+                        }}
+                      />
                       <input
                         type="range"
-                        min={priceMin}
-                        max={sliderMaxCap}
-                        value={Math.min(filters.priceRange[1] ?? 0, sliderMaxCap)}
-                        onChange={(e) => setFilters({
-                          ...filters,
-                          priceRange: [filters.priceRange[0], parseInt(e.target.value, 10)]
-                        })}
-                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-[var(--muted)]"
-                        style={{ accentColor: 'var(--primary)' }}
+                        min={0}
+                        max={1000000}
+                        value={filters.priceRange[0]}
+                        onChange={(e) => {
+                          const newMin = Math.min(parseInt(e.target.value, 10), filters.priceRange[1]);
+                          setFilters({ ...filters, priceRange: [newMin, filters.priceRange[1]] });
+                        }}
+                        className="min-slider"
                       />
-                      <div className="flex justify-between text-xs text-[var(--muted-foreground)] mt-1">
-                        <span>₹{formatCurrency(priceMin)}</span>
-                        <span>₹{formatCurrency(sliderMaxCap)}+</span>
+                      <input
+                        type="range"
+                        min={0}
+                        max={1000000}
+                        value={filters.priceRange[1]}
+                        onChange={(e) => {
+                          const newMax = Math.max(parseInt(e.target.value, 10), filters.priceRange[0]);
+                          setFilters({ ...filters, priceRange: [filters.priceRange[0], newMax] });
+                        }}
+                        className="max-slider"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div>
+                        <label className="text-xs text-[var(--muted-foreground)] mb-1 block">Min</label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={filters.priceRange[1]}
+                          value={filters.priceRange[0]}
+                          onChange={(e) => {
+                            const newMin = Math.max(0, Math.min(parseInt(e.target.value || '0', 10), filters.priceRange[1]));
+                            setFilters({ ...filters, priceRange: [newMin, filters.priceRange[1]] });
+                          }}
+                          inputMode="numeric"
+                          step={1000}
+                          onKeyDown={(e) => { if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault(); }}
+                          className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                        />
                       </div>
-                      <div className="mt-4 grid grid-cols-2 gap-3">
-                        <div className="flex flex-col col-span-2 sm:col-span-1">
-                          <label className="text-xs text-[var(--muted-foreground)] mb-1">Max</label>
-                          <input
-                            type="number"
-                            min={filters.priceRange[0]}
-                            max={9999999}
-                            value={sliderMaxCap}
-                            onChange={(e) => {
-                              const raw = Number(e.target.value || 0);
-                              const cap = Math.max(filters.priceRange[0], raw);
-                              setSliderMaxCap(cap);
-                              setFilters({ ...filters, priceRange: [filters.priceRange[0], Math.min(filters.priceRange[1], cap)] });
-                            }}
-                            inputMode="numeric"
-                            step={1}
-                            onKeyDown={(e) => { if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault(); }}
-                            className="px-3 py-2 w-28 text-right rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
-                          />
-                        </div>
+                      <div>
+                        <label className="text-xs text-[var(--muted-foreground)] mb-1 block">Max</label>
+                        <input
+                          type="number"
+                          min={filters.priceRange[0]}
+                          max={1000000}
+                          value={filters.priceRange[1]}
+                          onChange={(e) => {
+                            const newMax = Math.min(1000000, Math.max(parseInt(e.target.value || '0', 10), filters.priceRange[0]));
+                            setFilters({ ...filters, priceRange: [filters.priceRange[0], newMax] });
+                          }}
+                          inputMode="numeric"
+                          step={1000}
+                          onKeyDown={(e) => { if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault(); }}
+                          className="w-full px-3 py-2 rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] text-sm focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                        />
                       </div>
                     </div>
                   </div>
@@ -697,20 +810,7 @@ function ShopItemsContent() {
                     </div>
                   </div>
 
-                  {/* Stock Status */}
-                  <div>
-                    <h3 className="font-medium mb-3 text-[var(--foreground)]">Stock Status</h3>
-                    <div className="flex items-center space-x-2">
-                      <input
-                        type="checkbox"
-                        id="inStock"
-                        checked={filters.inStock}
-                        onChange={(e) => setFilters({ ...filters, inStock: e.target.checked })}
-                        className="h-4 w-4 text-[var(--primary)] focus:ring-[var(--primary)] border-[var(--border)] rounded"
-                      />
-                      <label htmlFor="inStock" className="text-sm cursor-pointer">In Stock Only</label>
-                    </div>
-                  </div>
+
                 </div>
 
                 <div className="mt-6 flex justify-end space-x-3">
@@ -720,7 +820,6 @@ function ShopItemsContent() {
                       setAppliedFilters(defaultFilters);
                       setPage(1);
                       setDidInitPriceRange(false);
-                      setSliderMaxCap(1000000);
                       setSearchEmptyMessage('');
                       setIsFilterOpen(false);
                     }}
@@ -775,7 +874,6 @@ function ShopItemsContent() {
                   setAppliedFilters(defaultFilters);
                   setPage(1);
                   setDidInitPriceRange(false);
-                  setSliderMaxCap(1000000);
                 }}
                 className="inline-flex items-center px-4 py-2 border border-[var(--border)] text-sm font-medium rounded-full shadow-sm text-[var(--foreground)] bg-[var(--card)] hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
               >
