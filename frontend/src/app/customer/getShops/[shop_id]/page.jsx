@@ -32,7 +32,15 @@ function ShopItemsContent() {
   const [wishlistIds, setWishlistIds] = useState(new Set());
   const [isWlLoading, setIsWlLoading] = useState(false);
   const [quantities, setQuantities] = useState({});
-  // Filter states
+
+  const defaultFilters = {
+    categories: [],
+    priceRange: [0, 1000000],
+    inStock: false,
+    sortBy: "featured",
+    rating: 0,
+  };
+
   const [search, setSearch] = useState("");
   const [searchAiOpen, setSearchAiOpen] = useState(false);
   const [searchAiBusy, setSearchAiBusy] = useState(false);
@@ -41,20 +49,29 @@ function ShopItemsContent() {
   const searchUploadRef = useRef(null);
   const [searchImageMode, setSearchImageMode] = useState(false);
   const [searchEmptyMessage, setSearchEmptyMessage] = useState('');
-  const [filters, setFilters] = useState({
-    categories: [],
-    priceRange: [0, 10000],
-    inStock: false,
-    sortBy: "featured",
-    rating: 0
-  });
+  const [filters, setFilters] = useState(defaultFilters);
+  const [appliedFilters, setAppliedFilters] = useState(defaultFilters);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [categories, setCategories] = useState([]);
-  const [sliderMaxCap, setSliderMaxCap] = useState(10000);
+  const [sliderMaxCap, setSliderMaxCap] = useState(1000000);
+
+  const formatCurrency = (value) => new Intl.NumberFormat('en-IN', { maximumFractionDigits: 0 }).format(value);
+  const isFilterActive = (filterState) =>
+    (filterState.categories?.length || 0) > 0
+    || filterState.rating > 0
+    || filterState.inStock
+    || filterState.priceRange?.[0] !== 0
+    || filterState.priceRange?.[1] !== 1000000;
+  const appliedFilterCount = [
+    appliedFilters.categories.length > 0 ? 1 : 0,
+    appliedFilters.rating > 0 ? 1 : 0,
+    appliedFilters.inStock ? 1 : 0,
+    appliedFilters.priceRange[0] !== 0 || appliedFilters.priceRange[1] !== 1000000 ? 1 : 0,
+  ].reduce((sum, value) => sum + value, 0);
+  const hasAppliedFilters = isFilterActive(appliedFilters);
 
   // Get unique values for filters
   const priceMin = 0;
-  const priceMax = Math.max(...items.map(item => item.price || 0), 1000);
   const ratings = [4, 3, 2, 1];
   const sortOptions = [
     { value: "featured", label: "Featured" },
@@ -71,15 +88,10 @@ function ShopItemsContent() {
     setSearch('');
     setSearchEmptyMessage('');
     setPage(1);
-    setFilters({
-      categories: [],
-      priceRange: [0, 10000],
-      inStock: false,
-      sortBy: 'featured',
-      rating: 0,
-    });
+    setFilters(defaultFilters);
+    setAppliedFilters(defaultFilters);
     setCategories([]);
-    setSliderMaxCap(10000);
+    setSliderMaxCap(1000000);
   }, [shop_id]);
 
   const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
@@ -127,12 +139,15 @@ function ShopItemsContent() {
           qs.set('page', '1');
           qs.set('limit', String(limit));
           qs.set('search', q);
-          if (filters.categories?.length) qs.set('categories', filters.categories.join(','));
-          if (typeof filters.priceRange?.[0] === 'number') qs.set('minPrice', String(filters.priceRange[0]));
-          if (typeof filters.priceRange?.[1] === 'number') qs.set('maxPrice', String(filters.priceRange[1]));
-          if (filters.inStock) qs.set('inStock', 'true');
-          if (filters.rating > 0) qs.set('rating', String(filters.rating));
-          if (filters.sortBy) qs.set('sort', filters.sortBy);
+          if (appliedFilters.categories?.length) qs.set('categories', appliedFilters.categories.join(','));
+          const shouldApplyPriceFilter = appliedFilters.priceRange[0] !== 0 || appliedFilters.priceRange[1] !== 1000000;
+          if (shouldApplyPriceFilter) {
+            if (typeof appliedFilters.priceRange?.[0] === 'number') qs.set('minPrice', String(appliedFilters.priceRange[0]));
+            if (typeof appliedFilters.priceRange?.[1] === 'number') qs.set('maxPrice', String(appliedFilters.priceRange[1]));
+          }
+          if (appliedFilters.inStock) qs.set('inStock', 'true');
+          if (appliedFilters.rating > 0) qs.set('rating', String(appliedFilters.rating));
+          if (appliedFilters.sortBy) qs.set('sort', appliedFilters.sortBy);
           setLoading(true);
           const res = await axios.get(`${API_URL}/api/customer/getShopItem/${shop_id}?${qs.toString()}`, {
             headers: { Authorization: `Bearer ${token}` },
@@ -198,12 +213,15 @@ function ShopItemsContent() {
         qs.set('page', String(page));
         qs.set('limit', String(limit));
         if (search && search.trim()) qs.set('search', search.trim());
-        if (filters.categories?.length) qs.set('categories', filters.categories.join(','));
-        if (typeof filters.priceRange?.[0] === 'number') qs.set('minPrice', String(filters.priceRange[0]));
-        if (typeof filters.priceRange?.[1] === 'number') qs.set('maxPrice', String(filters.priceRange[1]));
-        if (filters.inStock) qs.set('inStock', 'true');
-        if (filters.rating > 0) qs.set('rating', String(filters.rating));
-        if (filters.sortBy) qs.set('sort', filters.sortBy);
+        if (appliedFilters.categories?.length) qs.set('categories', appliedFilters.categories.join(','));
+        const shouldApplyPriceFilter = appliedFilters.priceRange[0] !== 0 || appliedFilters.priceRange[1] !== 1000000;
+        if (shouldApplyPriceFilter) {
+          if (typeof appliedFilters.priceRange?.[0] === 'number') qs.set('minPrice', String(appliedFilters.priceRange[0]));
+          if (typeof appliedFilters.priceRange?.[1] === 'number') qs.set('maxPrice', String(appliedFilters.priceRange[1]));
+        }
+        if (appliedFilters.inStock) qs.set('inStock', 'true');
+        if (appliedFilters.rating > 0) qs.set('rating', String(appliedFilters.rating));
+        if (appliedFilters.sortBy) qs.set('sort', appliedFilters.sortBy);
 
         const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await axios.get(`${API_URL}/api/customer/getShopItem/${shop_id}?${qs.toString()}`, {
@@ -223,7 +241,7 @@ function ShopItemsContent() {
 
         if (alive && fetchedItems.length > 0 && !didInitPriceRange) {
           const maxPrice = Math.ceil(Math.max(...fetchedItems.map(item => item.price || 0)) / 500) * 500;
-          const nextUpper = Math.max(maxPrice || 0, 10000);
+          const nextUpper = Math.max(maxPrice || 0, 1000000);
           setFilters(prev => {
             const curUpper = Array.isArray(prev.priceRange) ? prev.priceRange[1] : undefined;
             if (curUpper === nextUpper) return prev;
@@ -509,20 +527,17 @@ function ShopItemsContent() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-[var(--foreground)] shadow-sm transition duration-200 ease-in-out hover:border-[var(--primary)] hover:bg-[var(--background)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
+                className={`flex items-center gap-2 rounded-full border px-4 py-2 text-[var(--foreground)] shadow-sm transition duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30 ${hasAppliedFilters ? 'border-[var(--primary)] bg-[var(--primary)]/10 hover:bg-[var(--primary)]/15' : 'border-[var(--border)] bg-[var(--card)] hover:border-[var(--primary)] hover:bg-[var(--background)]'}`}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
                 </svg>
                 <span>Filters</span>
-                {(filters.categories?.length > 0
-                  || filters.priceRange[0] > priceMin
-                  || filters.priceRange[1] < priceMax
-                  || filters.rating > 0
-                  || filters.inStock
-                  || filters.sortBy !== 'featured') && (
-                    <span className="w-2 h-2 bg-[var(--primary)] rounded-full"></span>
-                  )}
+                {hasAppliedFilters ? (
+                  <span className="inline-flex items-center justify-center rounded-full bg-[var(--primary)] text-[var(--primary-foreground)] px-2 py-0.5 text-[10px] font-semibold">
+                    {appliedFilterCount}
+                  </span>
+                ) : null}
               </button>
               <span className="text-sm text-[var(--muted-foreground)]">
                 {total} {total === 1 ? 'item' : 'items'} found
@@ -568,7 +583,7 @@ function ShopItemsContent() {
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -8, scale: 0.98 }}
                 transition={{ duration: 0.25, ease: 'easeOut' }}
-                className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 shadow-lg overflow-hidden"
+                className={`bg-[var(--card)] rounded-xl p-6 shadow-sm overflow-hidden ${hasAppliedFilters ? 'border-[var(--primary)] ring-1 ring-[var(--primary)]/10' : 'border border-[var(--border)]'}`}
               >
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {/* Category Filter (multi-select) */}
@@ -600,7 +615,7 @@ function ShopItemsContent() {
                   {/* Price Range Filter */}
                   <div>
                     <h3 className="font-medium mb-3 text-[var(--foreground)]">
-                      Price Range: ₹{filters.priceRange[0]} - ₹{filters.priceRange[1]}
+                      Price Range: ₹{formatCurrency(filters.priceRange[0])} - ₹{formatCurrency(filters.priceRange[1])}
                     </h3>
                     <div className="px-2">
                       <input
@@ -610,13 +625,14 @@ function ShopItemsContent() {
                         value={Math.min(filters.priceRange[1] ?? 0, sliderMaxCap)}
                         onChange={(e) => setFilters({
                           ...filters,
-                          priceRange: [filters.priceRange[0], parseInt(e.target.value)]
+                          priceRange: [filters.priceRange[0], parseInt(e.target.value, 10)]
                         })}
-                        className="w-full h-2 bg-[var(--muted)] rounded-lg appearance-none cursor-pointer"
+                        className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-[var(--muted)]"
+                        style={{ accentColor: 'var(--primary)' }}
                       />
                       <div className="flex justify-between text-xs text-[var(--muted-foreground)] mt-1">
-                        <span>₹{priceMin}</span>
-                        <span>₹{sliderMaxCap}+</span>
+                        <span>₹{formatCurrency(priceMin)}</span>
+                        <span>₹{formatCurrency(sliderMaxCap)}+</span>
                       </div>
                       <div className="mt-4 grid grid-cols-2 gap-3">
                         <div className="flex flex-col col-span-2 sm:col-span-1">
@@ -635,7 +651,7 @@ function ShopItemsContent() {
                             inputMode="numeric"
                             step={1}
                             onKeyDown={(e) => { if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault(); }}
-                            className="px-3 py-2 w-28 text-right rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30"
+                            className="px-3 py-2 w-28 text-right rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
                           />
                         </div>
                       </div>
@@ -664,7 +680,7 @@ function ShopItemsContent() {
                                 {[...Array(5)].map((_, i) => (
                                   <svg
                                     key={i}
-                                    className={`w-4 h-4 ${i < rating ? 'text-yellow-400' : 'text-gray-300'}`}
+                                    className={`w-4 h-4 ${i < rating ? 'text-yellow-400' : 'text-[var(--muted-foreground)]'}`}
                                     fill="currentColor"
                                     viewBox="0 0 20 20"
                                     xmlns="http://www.w3.org/2000/svg"
@@ -699,20 +715,26 @@ function ShopItemsContent() {
 
                 <div className="mt-6 flex justify-end space-x-3">
                   <button
-                    onClick={() => setFilters({
-                      categories: [],
-                      priceRange: [priceMin, priceMax],
-                      inStock: false,
-                      sortBy: "featured",
-                      rating: 0
-                    })}
-                    className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                    onClick={() => {
+                      setFilters(defaultFilters);
+                      setAppliedFilters(defaultFilters);
+                      setPage(1);
+                      setDidInitPriceRange(false);
+                      setSliderMaxCap(1000000);
+                      setSearchEmptyMessage('');
+                      setIsFilterOpen(false);
+                    }}
+                    className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] border border-[var(--border)] rounded-full hover:bg-[var(--muted)]/60 transition-colors"
                   >
                     Reset Filters
                   </button>
                   <button
-                    onClick={() => setIsFilterOpen(false)}
-                    className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-medium rounded-full hover:bg-[var(--primary)]/90 transition-colors"
+                    onClick={() => {
+                      setAppliedFilters(filters);
+                      setPage(1);
+                      setIsFilterOpen(false);
+                    }}
+                    className="px-4 py-2 bg-[var(--primary)] text-[var(--primary-foreground)] text-sm font-medium rounded-full hover:bg-[var(--primary)]/90 transition-colors"
                   >
                     Apply Filters
                   </button>
@@ -749,13 +771,11 @@ function ShopItemsContent() {
               <button
                 onClick={() => {
                   setSearch('');
-                  setFilters({
-                    categories: [],
-                    priceRange: [priceMin, priceMax],
-                    inStock: false,
-                    sortBy: "featured",
-                    rating: 0
-                  });
+                  setFilters(defaultFilters);
+                  setAppliedFilters(defaultFilters);
+                  setPage(1);
+                  setDidInitPriceRange(false);
+                  setSliderMaxCap(1000000);
                 }}
                 className="inline-flex items-center px-4 py-2 border border-[var(--border)] text-sm font-medium rounded-full shadow-sm text-[var(--foreground)] bg-[var(--card)] hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
               >
