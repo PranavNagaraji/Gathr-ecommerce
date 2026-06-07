@@ -12,6 +12,7 @@ router.get("/getUserId/:clerkId", requireAuth, getUserId);
 
 router.post("/getShops", getLocalShops);
 router.get("/getShopItem/:shopId", getShopItems);
+router.get("/getShopItems/:shopId", getShopItems);
 router.post("/searchLocalItems", searchLocalItems);
 
 router.post("/addComment", requireAuth, addComments);

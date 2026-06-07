@@ -90,7 +90,7 @@ export const getLocalShops = async (req, res) => {
       try {
         const cu = await clerk.users.getUser(c);
         if (cu?.publicMetadata?.shop_banned) bannedClerks.add(c);
-      } catch {}
+      } catch { }
     }
     const filtered = (shops || []).filter(s => !bannedClerks.has(ownerIdToClerk.get(s.owner_id)));
     return res.status(200).json({ shops: filtered });
@@ -147,10 +147,10 @@ export const searchLocalItems = async (req, res) => {
         try {
           const cu = await clerk.users.getUser(c);
           if (cu?.publicMetadata?.shop_banned) bannedClerks.add(c);
-        } catch {}
+        } catch { }
       }
       candidateShops = candidateShops.filter(s => !bannedClerks.has(ownerIdToClerk.get(s.owner_id)));
-    } catch {}
+    } catch { }
 
     const shopIds = (candidateShops || []).map((s) => s.id).filter(Boolean);
     if (!shopIds.length) {
@@ -230,6 +230,10 @@ export const searchLocalItems = async (req, res) => {
 export const getShopItems = async (req, res) => {
   try {
     const { shopId } = req.params;
+    const shopIdNum = Number(shopId);
+    if (Number.isNaN(shopIdNum)) {
+      return res.status(400).json({ message: 'Invalid shopId' });
+    }
     const {
       page = '1',
       limit = '12',
@@ -250,7 +254,8 @@ export const getShopItems = async (req, res) => {
     let query = supabase
       .from('Items')
       .select('*', { count: 'exact' })
-      .eq('shop_id', shopId);
+      .eq('shop_id', shopIdNum)
+      .or('quantity.gt.0,quantity.is.null');
 
     if (search && String(search).trim()) {
       const term = String(search).trim();
@@ -259,12 +264,12 @@ export const getShopItems = async (req, res) => {
 
     const cats = typeof categories === 'string' && categories
       ? String(categories)
-          .split(',')
-          .map((c) => c.trim())
-          .filter(Boolean)
+        .split(',')
+        .map((c) => c.trim())
+        .filter(Boolean)
       : Array.isArray(categories)
-      ? categories.map((c) => String(c).trim()).filter(Boolean)
-      : [];
+        ? categories.map((c) => String(c).trim()).filter(Boolean)
+        : [];
     if (cats.length) {
       query = query.contains('category', cats);
     }
@@ -312,7 +317,8 @@ export const getShopItems = async (req, res) => {
       let base = supabase
         .from('Items')
         .select('*')
-        .eq('shop_id', shopId);
+        .eq('shop_id', shopIdNum)
+        .or('quantity.gt.0,quantity.is.null');
 
       if (search && String(search).trim()) {
         const term = String(search).trim();
@@ -352,16 +358,16 @@ export const getShopItems = async (req, res) => {
           list.sort((a, b) => Number(b.price ?? 0) - Number(a.price ?? 0));
           break;
         case 'name-asc':
-          list.sort((a, b) => String(a.name||'').localeCompare(String(b.name||'')));
+          list.sort((a, b) => String(a.name || '').localeCompare(String(b.name || '')));
           break;
         case 'name-desc':
-          list.sort((a, b) => String(b.name||'').localeCompare(String(a.name||'')));
+          list.sort((a, b) => String(b.name || '').localeCompare(String(a.name || '')));
           break;
         case 'newest':
-          list.sort((a, b) => new Date(b.created_at||0) - new Date(a.created_at||0));
+          list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
           break;
         default:
-          list.sort((a, b) => (Number(b.rating ?? 0) - Number(a.rating ?? 0)) || (new Date(b.created_at||0) - new Date(a.created_at||0)));
+          list.sort((a, b) => (Number(b.rating ?? 0) - Number(a.rating ?? 0)) || (new Date(b.created_at || 0) - new Date(a.created_at || 0)));
       }
 
       const total = list.length;
@@ -571,7 +577,7 @@ const createCart = async (userId) => {
     .insert({ user_id: userId, status: "active" })
     .select("*")
     .single();
-  
+
   if (cartError) return { message: "Cart creation failed", error: cartError.message };
   return cart;
 }

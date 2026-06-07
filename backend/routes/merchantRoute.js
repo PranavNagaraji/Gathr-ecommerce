@@ -1,6 +1,6 @@
 import express from "express";
 import requireAuth from "../utils/check.js";
-import { add_items, add_shop, getItems, checkShopExists, getShop, showOrders, updateorderStatus, getItem, checkDuplicateTitle } from "../controllers/merchant.controller.js";
+import { add_items, add_shop, getItems, checkShopExists, getShop, updateShopActive, showOrders, updateorderStatus, getItem, checkDuplicateTitle } from "../controllers/merchant.controller.js";
 import { updateItem, updateShop, deleteShop, deleteitem } from "../controllers/merchantup.controller.js";
 import { get_all_carts, getPendingCarts, updateOrderStatus, getBanStatus } from "../controllers/merchant3.controller.js";
 import { generateItemFromImage } from "../controllers/merchant_ai.controller.js";
@@ -29,6 +29,7 @@ router.delete('/delete_shop', requireAuth, deleteShop);
 
 //update routes
 router.put("/update_shop", requireAuth, updateShop);
+router.put("/update_shop_active", requireAuth, updateShopActive);
 router.put("/update_items", requireAuth, updateItem);
 router.put("/update_order_status", requireAuth, updateOrderStatus);
 // router.put("/update_order_status", requireAuth, updateorderStatus) <---this is update-status from first merchant file

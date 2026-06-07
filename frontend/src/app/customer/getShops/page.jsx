@@ -847,81 +847,113 @@ function CustomerDashboardContent() {
         ) : (
           <motion.div initial="hidden" animate="show" variants={gridVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3 gap-8" role="list" aria-label="Shops">
             <AnimatePresence>
-              {filteredShops.map((shop, idx) => (
-                <motion.div
-                  key={shop.id}
-                  variants={cardVariants}
-                  initial="hidden"
-                  animate="show"
-                  whileHover="hover"
-                  delay={idx * 0.1}
-                  className="relative bg-[var(--card)] text-[var(--card-foreground)] rounded-2xl shadow-md overflow-hidden border border-[var(--border)] hover:bg-[var(--muted)]/40 dark:hover:bg-[var(--muted)]/20 transition-colors duration-200"
-                >
-                  {/* Info icon top-right */}
-                  <Link href={`/customer/getShops/${shop.id}/about`} aria-label="Shop details" className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--card)]/80 border border-[var(--border)] hover:bg-[var(--muted)]/60">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
-                      <circle cx="12" cy="12" r="9" />
-                      <path d="M12 8h.01" />
-                      <path d="M11 12h1v4h1" />
-                    </svg>
-                  </Link>
+              {filteredShops.map((shop, idx) => {
+                const isInactive = shop.active === false;
+                const cardInner = (
+                  <motion.div whileTap={isInactive ? undefined : { scale: 0.99 }} className="rounded-2xl overflow-hidden shadow-md transition">
+                    <div className="h-44 md:h-48 bg-gradient-to-b from-[var(--muted)] to-[var(--card)] overflow-hidden">
+                      <img
+                        src={shop.image?.url || "/placeholder.png"}
+                        alt={shop.shop_name}
+                        className={`w-full h-full object-cover object-center ${isInactive ? "grayscale opacity-70" : ""}`}
+                      />
+                    </div>
 
-                  <Link href={`/customer/getShops/${shop.id}`} className="block">
-                    <motion.div whileTap={{ scale: 0.99 }} className="rounded-2xl overflow-hidden shadow-md transition">
-                      <div className="h-44 md:h-48 bg-gradient-to-b from-[var(--muted)] to-[var(--card)] overflow-hidden">
-                        <img
-                          src={shop.image?.url || "/placeholder.png"}
-                          alt={shop.shop_name}
-                          className="w-full h-full object-cover object-center"
-                        />
-                      </div>
+                    <div className="bg-[var(--card)] p-4 md:p-5">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-[var(--card-foreground)] text-lg md:text-xl font-semibold truncate">
+                            {shop.shop_name}
+                          </h3>
+                          <p className="text-sm text-[var(--muted-foreground)] mt-1 truncate">
+                            {shop.address}
+                          </p>
+                        </div>
 
-                      <div className="bg-[var(--card)] p-4 md:p-5">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex-1 min-w-0">
-                            <h3 className="text-[var(--card-foreground)] text-lg md:text-xl font-semibold truncate">
-                              {shop.shop_name}
-                            </h3>
-                            <p className="text-sm text-[var(--muted-foreground)] mt-1 truncate">
-                              {shop.address}
-                            </p>
-                          </div>
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {shop.category?.map((category, i) => {
+                            const l = (category || "").toLowerCase();
+                            const isHighlight = l.includes("popular") || l.includes("featured") || l.includes("best");
+                            return (
+                              <span
+                                key={i}
+                                className={`text-xs font-semibold px-3 py-1 rounded-full ${isHighlight ? "bg-[color-mix(in_oklab,var(--success),white_85%)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]"}`}
+                              >
+                                {category}
+                              </span>
+                            );
+                          })}
+                        </div>
 
-                          <div className="mt-4 flex flex-wrap gap-2">
-                            {shop.category?.map((category, i) => {
-                              const l = (category || "").toLowerCase();
-                              const isHighlight = l.includes("popular") || l.includes("featured") || l.includes("best");
-                              return (
-                                <span
-                                  key={i}
-                                  className={`text-xs font-semibold px-3 py-1 rounded-full ${isHighlight ? "bg-[color-mix(in_oklab,var(--success),white_85%)] text-[var(--success)]" : "bg-[var(--muted)] text-[var(--muted-foreground)]"}`}
-                                >
-                                  {category}
-                                </span>
-                              );
-                            })}
-                          </div>
-
-                          <div className="mt-4 flex items-center justify-between gap-3">
-                            <div className="flex items-center gap-3">
-                              <div className="flex -space-x-2">
-                                {Array.from({ length: Math.min(3, shop.memberAvatars?.length || 0) }).map((_, aIdx) => (
-                                  <img
-                                    key={aIdx}
-                                    src={shop.memberAvatars[aIdx]}
-                                    alt="member"
-                                    className="w-7 h-7 rounded-full border-2 border-[var(--card)]"
-                                  />
-                                ))}
-                              </div>
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex -space-x-2">
+                              {Array.from({ length: Math.min(3, shop.memberAvatars?.length || 0) }).map((_, aIdx) => (
+                                <img
+                                  key={aIdx}
+                                  src={shop.memberAvatars[aIdx]}
+                                  alt="member"
+                                  className="w-7 h-7 rounded-full border-2 border-[var(--card)]"
+                                />
+                              ))}
                             </div>
                           </div>
                         </div>
                       </div>
-                    </motion.div>
-                  </Link>
-                </motion.div>
-              ))}
+                    </div>
+                  </motion.div>
+                );
+
+                return (
+                  <motion.div
+                    key={shop.id}
+                    variants={cardVariants}
+                    initial="hidden"
+                    animate="show"
+                    whileHover={isInactive ? undefined : "hover"}
+                    delay={idx * 0.1}
+                    aria-disabled={isInactive}
+                    className={`relative bg-[var(--card)] text-[var(--card-foreground)] rounded-2xl shadow-md overflow-hidden border border-[var(--border)] transition-colors duration-200 ${
+                      isInactive ? "opacity-75 cursor-not-allowed" : "hover:bg-[var(--muted)]/40 dark:hover:bg-[var(--muted)]/20"
+                    }`}
+                  >
+                    {isInactive && (
+                      <>
+                        <div className="absolute inset-0 z-20 bg-[var(--muted)]/55 pointer-events-none" />
+                        <div className="absolute left-3 top-3 z-30 rounded-full border border-[var(--border)] bg-[var(--card)]/95 px-3 py-1 text-xs font-semibold text-[var(--muted-foreground)] shadow-sm">
+                          Currently Unavailable
+                        </div>
+                      </>
+                    )}
+
+                    {isInactive ? (
+                      <span aria-hidden="true" className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--card)]/80 border border-[var(--border)] opacity-60">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 8h.01" />
+                          <path d="M11 12h1v4h1" />
+                        </svg>
+                      </span>
+                    ) : (
+                      <Link href={`/customer/getShops/${shop.id}/about`} aria-label="Shop details" className="absolute top-3 right-3 z-10 inline-flex items-center justify-center w-8 h-8 rounded-full bg-[var(--card)]/80 border border-[var(--border)] hover:bg-[var(--muted)]/60">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-4 h-4">
+                          <circle cx="12" cy="12" r="9" />
+                          <path d="M12 8h.01" />
+                          <path d="M11 12h1v4h1" />
+                        </svg>
+                      </Link>
+                    )}
+
+                    {isInactive ? (
+                      <div className="block" aria-disabled="true">{cardInner}</div>
+                    ) : (
+                      <Link href={`/customer/getShops/${shop.id}`} className="block">
+                        {cardInner}
+                      </Link>
+                    )}
+                  </motion.div>
+                );
+              })}
             </AnimatePresence>
           </motion.div>
         )}

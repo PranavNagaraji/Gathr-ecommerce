@@ -37,6 +37,7 @@ export const add_shop = async (req, res) => {
       contact,
       account_no,
       mobile_no,
+      active: true,
       image: null,
       category
     }).select().single();
@@ -275,6 +276,48 @@ export const getShop = async (req, res) => {
   } catch (error) {
     console.error("Error fetching shop:", error);
     return res.status(500).json({ message: "Error fetching shop", error });
+  }
+}
+
+export const updateShopActive = async (req, res) => {
+  const { owner_id, active } = req.body;
+
+  if (!owner_id || typeof active !== "boolean") {
+    return res.status(400).json({ message: "owner_id and active boolean are required" });
+  }
+
+  try {
+    const { data: user, error: userError } = await supabase
+      .from('Users')
+      .select('id, role')
+      .eq('clerk_id', owner_id)
+      .single();
+
+    if (userError || !user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+    if (user.role !== "merchant") {
+      return res.status(403).json({ message: "User is not a merchant" });
+    }
+
+    const { data: shop, error: shopError } = await supabase
+      .from("Shops")
+      .update({ active })
+      .eq("owner_id", user.id)
+      .select("id, active")
+      .single();
+
+    if (shopError || !shop) {
+      return res.status(404).json({ message: "Shop not found for this user" });
+    }
+
+    return res.status(200).json({
+      message: active ? "Shop marked live" : "Shop marked inactive",
+      shop,
+    });
+  } catch (error) {
+    console.error("Error updating shop active state:", error);
+    return res.status(500).json({ message: "Error updating shop active state", error });
   }
 }
 

@@ -1,6 +1,10 @@
 import supabase from '../db.js';
 import { Clerk } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
+import {
+  getCartShopAvailability,
+  INACTIVE_SHOP_CART_MESSAGE,
+} from "../utils/shopAvailability.js";
 
 dotenv.config();
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -38,7 +42,7 @@ export const getCheckoutDetails = async (req, res) => {
 
     const { data: cartItems, error: cartItemError } = await supabase
       .from("Cart_items")
-      .select("quantity, Items(*)")
+      .select("item_id, quantity, Items(*)")
       .eq("cart_id", cart.id)
       .is("order_id", null);
 
@@ -46,16 +50,23 @@ export const getCheckoutDetails = async (req, res) => {
       return res.status(404).json({ message: "Cart Items not found" });
     }
 
+    const {
+      cartItems: cartItemsWithShopStatus,
+      inactiveCartItems,
+    } = await getCartShopAvailability(cartItems);
+
     let totalPrice = 0;
-    for (let item of cartItems) {
+    for (let item of cartItemsWithShopStatus) {
       totalPrice += item.Items.price * item.quantity;
     }
 
     return res.status(200).json({
       totalPrice,
-      shop_id: cartItems[0].Items.shop_id,
+      shop_id: cartItemsWithShopStatus[0].Items.shop_id,
       cart_id: cart.id,
-      cartItems,
+      cartItems: cartItemsWithShopStatus,
+      inactiveCartItems,
+      hasInactiveShopItems: inactiveCartItems.length > 0,
     });
   } catch (err) {
     console.error("Server error in getCheckoutDetails:", err);
@@ -112,7 +123,7 @@ export const getPriceBreakdown = async (req, res) => {
     // Get cart items with item details
     const { data: cartItems, error: itemsError } = await supabase
       .from('Cart_items')
-      .select('quantity, Items(*)')
+      .select('item_id, quantity, Items(*)')
       .eq('cart_id', cart.id)
       .is('order_id', null);
 
@@ -120,7 +131,12 @@ export const getPriceBreakdown = async (req, res) => {
       return res.status(404).json({ message: 'Cart items not found' });
     }
 
-    const shopId = cartItems[0].Items.shop_id;
+    const {
+      cartItems: cartItemsWithShopStatus,
+      inactiveCartItems,
+    } = await getCartShopAvailability(cartItems);
+
+    const shopId = cartItemsWithShopStatus[0].Items.shop_id;
 
     // Fetch shop location
     const { data: shop, error: shopError } = await supabase
@@ -146,7 +162,7 @@ export const getPriceBreakdown = async (req, res) => {
     }
 
     // Compute subtotal
-    const subtotal = cartItems.reduce((sum, ci) => sum + (ci.Items?.price || 0) * (ci.quantity || 0), 0);
+    const subtotal = cartItemsWithShopStatus.reduce((sum, ci) => sum + (ci.Items?.price || 0) * (ci.quantity || 0), 0);
 
     // Haversine distance
     const toRad = (v) => (v * Math.PI) / 180;
@@ -185,7 +201,9 @@ export const getPriceBreakdown = async (req, res) => {
     return res.status(200).json({
       cartId: cart.id,
       shop_id: shopId,
-      cartItems,
+      cartItems: cartItemsWithShopStatus,
+      inactiveCartItems,
+      hasInactiveShopItems: inactiveCartItems.length > 0,
       subtotal,
       gst,
       deliveryFee,
@@ -214,13 +232,25 @@ export const placeOrder = async (req, res) => {
   // Compute amounts securely on server
   const { data: cartItems, error: cartItemsError0 } = await supabase
     .from("Cart_items")
-    .select("quantity, Items(*)")
+    .select("item_id, quantity, Items(*)")
     .eq("cart_id", cart_id)
     .is("order_id", null);
   if (cartItemsError0 || !cartItems?.length) {
     return res.status(404).json({ message: "Cart Items not found" });
   }
-  const subtotal = cartItems.reduce((sum, ci) => sum + (ci.Items?.price || 0) * (ci.quantity || 0), 0);
+  const {
+    cartItems: cartItemsWithShopStatus,
+    inactiveCartItems,
+  } = await getCartShopAvailability(cartItems);
+
+  if (inactiveCartItems.length > 0) {
+    return res.status(400).json({
+      message: INACTIVE_SHOP_CART_MESSAGE,
+      inactiveCartItems,
+    });
+  }
+
+  const subtotal = cartItemsWithShopStatus.reduce((sum, ci) => sum + (ci.Items?.price || 0) * (ci.quantity || 0), 0);
   const { data: shop, error: shopError } = await supabase
     .from('Shops')
     .select('id, Location')

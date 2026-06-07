@@ -80,7 +80,7 @@ async function fetchShopDetails(shopId) {
 // Fetch items from database
 async function fetchShopProducts(shopId) {
   const res = await fetch(
-    `${process.env.NEXT_PUBLIC_BASE_URL}/api/customer/getShopItems/${shopId}`
+    `${process.env.NEXT_PUBLIC_BASE_URL}/api/customer/getShopItem/${shopId}`
   );
   if (!res.ok) throw new Error("Failed to fetch shop products");
   const data = await res.json();
@@ -149,8 +149,7 @@ export async function POST(req) {
         .slice(0, 15)
         .map(
           (p) =>
-            `${p.name} (₹${p.price || "?"}) in category ${
-              p.category || "Uncategorized"
+            `${p.name} (₹${p.price || "?"}) in category ${p.category || "Uncategorized"
             }`
         )
         .join(", ");

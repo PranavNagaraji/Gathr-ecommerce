@@ -1,7 +1,7 @@
 "use client";
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
-import { useEffect, useState, useRef } from "react";
+import { useCallback, useEffect, useState, useRef } from "react";
 import { useJsApiLoader, StandaloneSearchBox } from "@react-google-maps/api";
 import 'leaflet/dist/leaflet.css';
 // Leaflet must be loaded only on the client to avoid SSR 'window is not defined'
@@ -18,8 +18,15 @@ const containerStyle = {
   height: "150px",
 };
 
-const CartItemsSummary = ({ cartItems, totalPrice }) => {
+const INACTIVE_SHOP_CART_MESSAGE =
+  "Some items in your cart are from shops that are currently unavailable. Please remove them before proceeding.";
+
+const CartItemsSummary = ({ cartItems, totalPrice, inactiveCartItems = [] }) => {
   if (!cartItems || cartItems.length === 0) return null;
+  const inactiveItemIds = new Set(
+    inactiveCartItems.map((item) => item.item_id).filter(Boolean).map(String)
+  );
+
   return (
     <div className="bg-[var(--card)] text-[var(--card-foreground)] border border-[var(--border)] rounded-2xl p-6">
       <h3 className="text-lg font-semibold mb-4 border-b border-[var(--border)] pb-2 flex items-center gap-2">
@@ -30,13 +37,27 @@ const CartItemsSummary = ({ cartItems, totalPrice }) => {
           const price = item.Items?.price || 0;
           const qty = item.quantity || 0;
           const lineTotal = price * qty;
+          const itemId = item.item_id || item.Items?.id;
+          const isUnavailable =
+            item.Items?.shop_active === false || inactiveItemIds.has(String(itemId));
           return (
-            <div key={idx} className="py-3 flex items-center justify-between text-sm gap-4">
+            <div
+              key={idx}
+              className={`my-1 flex items-center justify-between text-sm gap-4 rounded-2xl py-3 transition-colors ${isUnavailable
+                  ? "border border-[var(--destructive)]/40 bg-[var(--destructive)]/10 px-4 shadow-sm"
+                  : ""
+                }`}
+            >
               <div className="min-w-0 flex-1">
                 <p className="font-medium truncate text-[var(--foreground)]">{item.Items?.name}</p>
                 <p className="text-xs text-[var(--muted-foreground)] mt-0.5">
                   ₹{price.toLocaleString('en-IN')} × {qty}
                 </p>
+                {isUnavailable && (
+                  <p className="text-xs font-semibold text-[var(--destructive)] mt-1">
+                    Currently unavailable
+                  </p>
+                )}
               </div>
               <span className="font-semibold flex-shrink-0 text-[var(--foreground)]">
                 ₹{lineTotal.toLocaleString('en-IN')}
@@ -62,9 +83,12 @@ const Checkout = () => {
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
   const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
-  const [checkOutDetails , setCheckOutDetails] = useState({});
+  const [checkOutDetails, setCheckOutDetails] = useState({});
   const [priceBreakdown, setPriceBreakdown] = useState(null);
   const [shopDetails, setShopDetails] = useState(null);
+  const [inactiveCartItems, setInactiveCartItems] = useState([]);
+  const [checkoutGuardError, setCheckoutGuardError] = useState("");
+  const [checkingShopAvailability, setCheckingShopAvailability] = useState(false);
 
   const [addressToggle, setAddressToggle] = useState(false);
   const [addresses, setAddresses] = useState([]);
@@ -78,10 +102,36 @@ const Checkout = () => {
   const [paymentMethod, setPaymentMethod] = useState("");
 
   const Libraries = ["places"];
-    const { isLoaded: mapLoaded } = useJsApiLoader({
+  const { isLoaded: mapLoaded } = useJsApiLoader({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
     libraries: Libraries, // ← Important! Include "places"
+  });
+
+  const applyInactiveGuard = useCallback((payload) => {
+    const inactive = Array.isArray(payload?.inactiveCartItems)
+      ? payload.inactiveCartItems
+      : [];
+    setInactiveCartItems(inactive);
+    setCheckoutGuardError(inactive.length > 0 ? INACTIVE_SHOP_CART_MESSAGE : "");
+    return inactive;
+  }, []);
+
+  const refreshCheckoutDetails = useCallback(async () => {
+    if (!isLoaded || !isSignedIn || !user) {
+      return { data: null, inactiveCartItems: [] };
+    }
+
+    const token = await getToken();
+    const res = await axios.get(`${API_URL}/api/order/getCheckout/${user.id}`, {
+      headers: { Authorization: `Bearer ${token}` },
     });
+
+    const data = res.data || {};
+    setCheckOutDetails(data);
+    const inactive = applyInactiveGuard(data);
+
+    return { data, inactiveCartItems: inactive };
+  }, [isLoaded, isSignedIn, user, getToken, API_URL, applyInactiveGuard]);
 
   useEffect(() => {
     let isMounted = true;
@@ -101,7 +151,7 @@ const Checkout = () => {
         if (isMounted) {
           L.Marker.prototype.options.icon = defaultIcon;
         }
-      } catch {}
+      } catch { }
     })();
     return () => { isMounted = false; };
   }, []);
@@ -130,28 +180,11 @@ const Checkout = () => {
       }
     };
     getAddresses();
-    const getCheckOutDetails = async () => {
-      console.log(user.id); 
-        try{
-            const token = await getToken();
-            console.log(token);
-            const res = await axios.get(`${API_URL}/api/order/getCheckout/${user.id}`,{
-                headers: { Authorization: `Bearer ${token}` },
-            });
-            const resolvedCartId = res.data?.cart_id || res.data?.cartId;
-            console.log("[DEBUG] Resolved Cart ID at top of checkout fetch:", resolvedCartId);
-            console.log("Checkout details:", res.data);
-            console.log(res.data);
+    refreshCheckoutDetails().catch((error) => {
+      console.error("Error fetching checkout details:", error);
+    });
 
-            setCheckOutDetails(res.data);
-        }catch(error){
-            console.log('hi');
-            console.error("Error fetching checkout details:", error);
-        }
-    }
-    getCheckOutDetails();
-
-  }, [isLoaded, isSignedIn, user]);
+  }, [isLoaded, isSignedIn, user, getToken, API_URL, refreshCheckoutDetails]);
 
   // Fetch server-side price breakdown whenever an address is selected
   useEffect(() => {
@@ -223,7 +256,7 @@ const Checkout = () => {
       (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        
+
         if (window.google && window.google.maps) {
           const geocoder = new window.google.maps.Geocoder();
           geocoder.geocode({ location: { lat, lng } }, (results, status) => {
@@ -333,23 +366,52 @@ const Checkout = () => {
 
   const handleDeleteAddress = async (id) => {
     const token = await getToken();
-    await axios.post(`${API_URL}/api/customer/deleteAddress`, { clerkId: user.id , addressId: id },{
+    await axios.post(`${API_URL}/api/customer/deleteAddress`, { clerkId: user.id, addressId: id }, {
       headers: { Authorization: `Bearer ${token}` },
     });
     setAddresses((prev) => prev.filter((a) => a.id !== id));
   };
 
-  const handleCheckOut = async () =>{
+  const applyInactiveErrorResponse = useCallback((payload) => {
+    const message = payload?.message || payload?.error;
+    const inactive = Array.isArray(payload?.inactiveCartItems)
+      ? payload.inactiveCartItems
+      : [];
+
+    if (message === INACTIVE_SHOP_CART_MESSAGE || inactive.length > 0) {
+      setInactiveCartItems(inactive);
+      setCheckoutGuardError(INACTIVE_SHOP_CART_MESSAGE);
+      return true;
+    }
+
+    return false;
+  }, []);
+
+  const handleCheckOut = async () => {
+    try {
+      setCheckingShopAvailability(true);
+      const { inactiveCartItems: latestInactiveItems } = await refreshCheckoutDetails();
+      if (latestInactiveItems.length > 0) {
+        return;
+      }
+    } catch (error) {
+      console.error("Shop availability check failed:", error);
+      setCheckoutGuardError("Unable to verify shop availability. Please try again.");
+      return;
+    } finally {
+      setCheckingShopAvailability(false);
+    }
+
     if (!selectedAddressId) {
       showToast.error("Please select a delivery address");
       return;
     }
-    
+
     if (priceBreakdown && priceBreakdown.distanceKm > 18.0) {
       showToast.error("Delivery address is outside the allocated delivery range of 18 km.");
       return;
     }
-    
+
     if (!paymentMethod) {
       showToast.error("Please select a payment method");
       return;
@@ -358,7 +420,7 @@ const Checkout = () => {
     try {
       const token = await getToken();
 
-     if (paymentMethod == "cod") {
+      if (paymentMethod == "cod") {
         try {
           const token = await getToken();
           console.log(token);
@@ -391,12 +453,15 @@ const Checkout = () => {
           }
         } catch (error) {
           console.error("COD Checkout Error:", error.response?.data || error.message);
+          if (applyInactiveErrorResponse(error.response?.data)) {
+            return;
+          }
           showToast.error(
             error.response?.data?.message || "Failed to place COD order. Please try again."
           );
         }
       }
-    else if (paymentMethod === "online") {
+      else if (paymentMethod === "online") {
         // Handle Razorpay Online Payment
         // Step 1: Load Razorpay script
         const loadRazorpayScript = () => {
@@ -418,15 +483,15 @@ const Checkout = () => {
         // Step 2: Create Razorpay order directly from active cart info
         const checkoutResponse = await axios.post(
           `${API_URL}/razorpay/create-checkout-session`,
-          { 
+          {
             clerkId: user.id,
             addressId: selectedAddressId
           },
-          { 
-            headers: { 
+          {
+            headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${token}` 
-            } 
+              Authorization: `Bearer ${token}`
+            }
           }
         );
 
@@ -466,6 +531,9 @@ const Checkout = () => {
               }
             } catch (err) {
               console.error("Verification error:", err);
+              if (applyInactiveErrorResponse(err.response?.data)) {
+                return;
+              }
               showToast.error("Verification failed.");
               router.push("/payment-cancelled");
             }
@@ -487,6 +555,9 @@ const Checkout = () => {
       }
     } catch (error) {
       console.error("Checkout error:", error);
+      if (applyInactiveErrorResponse(error.response?.data)) {
+        return;
+      }
       showToast.error("Failed to place order. Please try again.");
     }
   }
@@ -504,15 +575,24 @@ const Checkout = () => {
       ) : (
         <div className="h-6" />
       )}
+      {checkoutGuardError && (
+        <div className="mb-6 rounded-2xl border border-[var(--destructive)]/70 bg-[var(--destructive)]/10 px-5 py-4 text-sm font-semibold text-[var(--destructive)] shadow-sm ring-1 ring-[var(--destructive)]/10">
+          <div className="flex items-start gap-3">
+            <span className="mt-0.5 inline-flex h-8 w-8 items-center justify-center rounded-full border border-[var(--destructive)]/30 bg-[var(--destructive)]/15 text-[var(--destructive)]">!</span>
+            <span>{checkoutGuardError}</span>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         {/* Left: Address + Payment */}
         <div className="lg:col-span-2 space-y-8">
           {/* Mobile Cart Items Summary */}
           <div className="block lg:hidden mb-6">
-            <CartItemsSummary 
-              cartItems={checkOutDetails?.cartItems || []} 
-              totalPrice={priceBreakdown?.subtotal ?? checkOutDetails?.totalPrice ?? 0} 
+            <CartItemsSummary
+              cartItems={checkOutDetails?.cartItems || []}
+              totalPrice={priceBreakdown?.subtotal ?? checkOutDetails?.totalPrice ?? 0}
+              inactiveCartItems={inactiveCartItems}
             />
           </div>
 
@@ -520,196 +600,195 @@ const Checkout = () => {
             <h2 className="text-xl font-semibold mb-4">Select a Shipping Address</h2>
 
             <div className="grid md:grid-cols-2 gap-4" role="list" aria-label="Saved addresses">
-          {addresses.map((address,idx) => {
-            const isSelected = selectedAddressId === address.id;
-            const isTooFar = isSelected && priceBreakdown && priceBreakdown.distanceKm > 18.0;
-            return (
-              <label
-                key={idx}
-                role="listitem"
-                style={
-                  isSelected
-                    ? {
-                        backgroundColor: isTooFar
-                          ? "color-mix(in oklab, var(--destructive), var(--background) 70%)"
-                          : "color-mix(in oklab, var(--primary), var(--background) 70%)",
-                        borderColor: isTooFar ? "var(--destructive)" : "var(--primary)"
-                      }
-                    : {}
-                }
-                className={`border rounded-xl p-4 cursor-pointer transition-all ${
-                  isSelected
-                    ? "text-[var(--foreground)] shadow-md font-medium"
-                    : "border-[var(--border)] hover:border-[var(--ring)]/60 bg-[var(--card)] text-[var(--muted-foreground)]"
-                }`}
-              >
-                <div className="flex items-start gap-3 mb-3">
-                  <input
-                    type="radio"
-                    name="address"
-                    value={address.id}
-                    checked={isSelected}
-                    onChange={() => handleSelect(address.id)}
-                    className="mt-1 accent-[var(--primary)]"
-                  />
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-start justify-between gap-2 mb-1">
-                      <div>
-                        <p className="font-semibold text-base">{address.title}</p>
-                        {isTooFar && (
-                          <span className="text-xs text-red-600 dark:text-red-200 font-semibold block mt-0.5 animate-pulse">
-                            ⚠️ Outside Delivery Range ({priceBreakdown.distanceKm.toFixed(1)} km)
-                          </span>
+              {addresses.map((address, idx) => {
+                const isSelected = selectedAddressId === address.id;
+                const isTooFar = isSelected && priceBreakdown && priceBreakdown.distanceKm > 18.0;
+                return (
+                  <label
+                    key={idx}
+                    role="listitem"
+                    style={
+                      isSelected
+                        ? {
+                          backgroundColor: isTooFar
+                            ? "color-mix(in oklab, var(--destructive), var(--background) 70%)"
+                            : "color-mix(in oklab, var(--primary), var(--background) 70%)",
+                          borderColor: isTooFar ? "var(--destructive)" : "var(--primary)"
+                        }
+                        : {}
+                    }
+                    className={`border rounded-xl p-4 cursor-pointer transition-all ${isSelected
+                        ? "text-[var(--foreground)] shadow-md font-medium"
+                        : "border-[var(--border)] hover:border-[var(--ring)]/60 bg-[var(--card)] text-[var(--muted-foreground)]"
+                      }`}
+                  >
+                    <div className="flex items-start gap-3 mb-3">
+                      <input
+                        type="radio"
+                        name="address"
+                        value={address.id}
+                        checked={isSelected}
+                        onChange={() => handleSelect(address.id)}
+                        className="mt-1 accent-[var(--primary)]"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-start justify-between gap-2 mb-1">
+                          <div>
+                            <p className="font-semibold text-base">{address.title}</p>
+                            {isTooFar && (
+                              <span className="text-xs text-red-600 dark:text-red-200 font-semibold block mt-0.5 animate-pulse">
+                                ⚠️ Outside Delivery Range ({priceBreakdown.distanceKm.toFixed(1)} km)
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            onClick={(e) => {
+                              e.preventDefault();
+                              handleDeleteAddress(address.id);
+                            }}
+                            className="text-[var(--destructive)] hover:opacity-70 transition"
+                            aria-label="Delete address"
+                          >
+                            <Trash2 size={18} />
+                          </button>
+                        </div>
+                        <p className={`text-sm mb-1 ${isSelected ? "text-[var(--foreground)]/85" : "text-[var(--muted-foreground)]"}`}>{address.address}</p>
+                        {address.description && (
+                          <p className={`text-xs mb-1 ${isSelected ? "text-[var(--foreground)]/75" : "text-[var(--muted-foreground)]"}`}>{address.description}</p>
+                        )}
+                        {address.mobile_no && (
+                          <p className="text-sm flex items-center gap-1 mt-1.5">📞 {address.mobile_no}</p>
                         )}
                       </div>
-                      <button
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleDeleteAddress(address.id);
-                        }}
-                        className="text-[var(--destructive)] hover:opacity-70 transition"
-                        aria-label="Delete address"
-                      >
-                        <Trash2 size={18} />
-                      </button>
                     </div>
-                    <p className={`text-sm mb-1 ${isSelected ? "text-[var(--foreground)]/85" : "text-[var(--muted-foreground)]"}`}>{address.address}</p>
-                    {address.description && (
-                      <p className={`text-xs mb-1 ${isSelected ? "text-[var(--foreground)]/75" : "text-[var(--muted-foreground)]"}`}>{address.description}</p>
+
+                    {/* Map */}
+                    {address.location?.lat && address.location?.long && (
+                      <div className="rounded-lg overflow-hidden border border-[var(--border)] mt-3 relative z-0">
+                        <MiniLeafletMap
+                          style={containerStyle}
+                          center={[address.location.lat, address.location.long]}
+                          zoom={15}
+                          marker={{ position: [address.location.lat, address.location.long], draggable: false }}
+                        />
+                      </div>
                     )}
-                    {address.mobile_no && (
-                      <p className="text-sm flex items-center gap-1 mt-1.5">📞 {address.mobile_no}</p>
-                    )}
+                  </label>
+                );
+              })}
+              <button
+                onClick={() => setAddressToggle(!addressToggle)}
+                className="min-h-[200px] border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center hover:bg-[var(--muted)]/40 hover:border-[var(--primary)]/50 transition-all group"
+                aria-label="Add new address"
+              >
+                <div className="text-5xl text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors mb-2">+</div>
+                <span className="text-sm text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors">Add Address</span>
+              </button>
+
+              {addressToggle && (
+                <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center">
+                  <div className="bg-[var(--popover)] text-[var(--popover-foreground)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-2xl relative space-y-4 h-3/4 overflow-y-auto ">
+                    {/* Close button */}
+                    <button
+                      onClick={() => setAddressToggle(false)}
+                      className="absolute top-3 right-3 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xl font-bold"
+                      aria-label="Close"
+                    >
+                      ✕
+                    </button>
+
+                    <p className="text-sm text-[var(--muted-foreground)] mb-2">Create a new address</p>
+
+                    <div className="flex flex-col space-y-3">
+                      {/* Title */}
+                      <label className="text-[var(--card-foreground)]">Title</label>
+                      <input
+                        type="text"
+                        placeholder="Title (e.g., Home, Office)"
+                        value={addAddress.title || ""}
+                        onChange={(e) =>
+                          setAddAddress((prev) => ({ ...prev, title: e.target.value }))
+                        }
+                        className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)]"
+                      />
+
+
+
+                      {/* Google Places Autocomplete */}
+                      <div className="flex items-center justify-between">
+                        <label className="text-[var(--card-foreground)] font-medium">Address</label>
+                        <button
+                          type="button"
+                          onClick={handleFetchCurrentLocation}
+                          disabled={fetchingLocation}
+                          className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1 font-semibold disabled:opacity-50"
+                        >
+                          {fetchingLocation ? "⏳ Locating..." : "📍 Use Current Location"}
+                        </button>
+                      </div>
+
+                      <StandaloneSearchBox
+                        onLoad={(ref) => setSearchBox(ref)}
+                        onPlacesChanged={() => {
+                          if (!searchBox) return;
+                          const places = searchBox.getPlaces();
+                          if (!places || places.length === 0) return;
+                          const place = places[0];
+
+                          setAddAddress((prev) => ({
+                            ...prev,
+                            address: place.formatted_address,
+                            location: {
+                              latitude: place.geometry.location.lat(),
+                              longitude: place.geometry.location.lng(),
+                            },
+                          }));
+
+                          // Center map to selected place
+                          if (leafletMapRef.current) {
+                            leafletMapRef.current.setView([place.geometry.location.lat(), place.geometry.location.lng()], 15);
+                          }
+                        }}
+                      >
+                        <input
+                          type="text"
+                          placeholder="Search Address"
+                          value={addAddress.address || ""}
+                          onChange={(e) =>
+                            setAddAddress((prev) => ({ ...prev, address: e.target.value }))
+                          }
+                          className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)]"
+                        />
+                      </StandaloneSearchBox>
+
+                      {/* Map */}
+                      <MiniLeafletMap
+                        style={{ width: "100%", height: "250px" }}
+                        center={
+                          addAddress.location?.latitude
+                            ? [Number(addAddress.location.latitude), Number(addAddress.location.longitude)]
+                            : [20, 77]
+                        }
+                        zoom={addAddress.location?.latitude ? 15 : 4}
+                        marker={addAddress.location?.latitude && addAddress.location?.longitude ? {
+                          position: [Number(addAddress.location.latitude), Number(addAddress.location.longitude)],
+                          draggable: true,
+                          onDragEnd: (ll) => updateAddressFromCoords(ll.lat, ll.lng)
+                        } : null}
+                        onMapClick={(ll) => updateAddressFromCoords(ll.lat, ll.lng)}
+                        mapRefOut={leafletMapRef}
+                      />
+
+                      {/* Submit button */}
+                      <div className="mt-4">
+                        <AnimatedButton onClick={handleAddAddress} variant="primary" rounded="lg" >
+                          Add Address
+                        </AnimatedButton>
+                      </div>
+                    </div>
                   </div>
                 </div>
-
-                {/* Map */}
-                {address.location?.lat && address.location?.long && (
-                  <div className="rounded-lg overflow-hidden border border-[var(--border)] mt-3 relative z-0">
-                    <MiniLeafletMap
-                      style={containerStyle}
-                      center={[address.location.lat, address.location.long]}
-                      zoom={15}
-                      marker={{ position: [address.location.lat, address.location.long], draggable: false }}
-                    />
-                  </div>
-                )}
-              </label>
-            );
-          })}
-          <button
-            onClick={()=>setAddressToggle(!addressToggle)}
-            className="min-h-[200px] border-2 border-dashed border-[var(--border)] rounded-xl flex flex-col items-center justify-center hover:bg-[var(--muted)]/40 hover:border-[var(--primary)]/50 transition-all group"
-            aria-label="Add new address"
-          >
-            <div className="text-5xl text-[var(--muted-foreground)] group-hover:text-[var(--primary)] transition-colors mb-2">+</div>
-            <span className="text-sm text-[var(--muted-foreground)] group-hover:text-[var(--foreground)] transition-colors">Add Address</span>
-          </button>
-
-        {addressToggle && (
-        <div className="fixed inset-0 z-[9999] bg-black/40 flex items-center justify-center">
-            <div className="bg-[var(--popover)] text-[var(--popover-foreground)] border border-[var(--border)] rounded-2xl p-6 w-full max-w-2xl relative space-y-4 h-3/4 overflow-y-auto ">
-            {/* Close button */}
-            <button
-                onClick={() => setAddressToggle(false)}
-                className="absolute top-3 right-3 text-[var(--muted-foreground)] hover:text-[var(--foreground)] text-xl font-bold"
-                aria-label="Close"
-            >
-                ✕
-            </button>
-
-            <p className="text-sm text-[var(--muted-foreground)] mb-2">Create a new address</p>
-
-            <div className="flex flex-col space-y-3">
-                {/* Title */}
-                <label className="text-[var(--card-foreground)]">Title</label>
-                <input
-                type="text"
-                placeholder="Title (e.g., Home, Office)"
-                value={addAddress.title || ""}
-                onChange={(e) =>
-                    setAddAddress((prev) => ({ ...prev, title: e.target.value }))
-                }
-                className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)]"
-                />
-
-
-
-                {/* Google Places Autocomplete */}
-                <div className="flex items-center justify-between">
-                  <label className="text-[var(--card-foreground)] font-medium">Address</label>
-                  <button
-                    type="button"
-                    onClick={handleFetchCurrentLocation}
-                    disabled={fetchingLocation}
-                    className="text-xs text-[var(--primary)] hover:underline flex items-center gap-1 font-semibold disabled:opacity-50"
-                  >
-                    {fetchingLocation ? "⏳ Locating..." : "📍 Use Current Location"}
-                  </button>
-                </div>        
-                
-                <StandaloneSearchBox
-                onLoad={(ref) => setSearchBox(ref)}
-                onPlacesChanged={() => {
-                    if (!searchBox) return;
-                    const places = searchBox.getPlaces();
-                    if (!places || places.length === 0) return;
-                    const place = places[0];
-
-                    setAddAddress((prev) => ({
-                    ...prev,
-                    address: place.formatted_address,
-                    location: {
-                        latitude: place.geometry.location.lat(),
-                        longitude: place.geometry.location.lng(),
-                    },
-                    }));
-
-                    // Center map to selected place
-                    if (leafletMapRef.current) {
-                      leafletMapRef.current.setView([place.geometry.location.lat(), place.geometry.location.lng()], 15);
-                    }
-                }}
-                >
-                <input
-                    type="text"
-                    placeholder="Search Address"
-                    value={addAddress.address || ""}
-                    onChange={(e) =>
-                    setAddAddress((prev) => ({ ...prev, address: e.target.value }))
-                    }
-                    className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)]"
-                />
-                </StandaloneSearchBox>
-
-                 {/* Map */}
-                 <MiniLeafletMap
-                   style={{ width: "100%", height: "250px" }}
-                   center={
-                     addAddress.location?.latitude
-                       ? [Number(addAddress.location.latitude), Number(addAddress.location.longitude)]
-                       : [20, 77]
-                   }
-                   zoom={addAddress.location?.latitude ? 15 : 4}
-                   marker={addAddress.location?.latitude && addAddress.location?.longitude ? {
-                     position: [Number(addAddress.location.latitude), Number(addAddress.location.longitude)],
-                     draggable: true,
-                     onDragEnd: (ll) => updateAddressFromCoords(ll.lat, ll.lng)
-                   } : null}
-                   onMapClick={(ll) => updateAddressFromCoords(ll.lat, ll.lng)}
-                   mapRefOut={leafletMapRef}
-                 />
- 
-                 {/* Submit button */}
-                 <div className="mt-4">
-                 <AnimatedButton onClick={handleAddAddress} variant="primary" rounded="lg" >
-                   Add Address
-                 </AnimatedButton>
-                 </div>
-            </div>
-            </div>
-        </div>
-        )}
+              )}
 
             </div>
           </div>
@@ -762,24 +841,29 @@ const Checkout = () => {
               </div>
             )}
             <div className="mt-4">
-            <AnimatedButton
-              onClick={handleCheckOut}
-              className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
-              size="lg"
-              rounded="lg"
-              variant={priceBreakdown && priceBreakdown.distanceKm > 18.0 ? "muted" : "primary"}
-              disabled={!!(priceBreakdown && priceBreakdown.distanceKm > 18.0)}
-            >
-              {priceBreakdown && priceBreakdown.distanceKm > 18.0 ? "Undeliverable" : "Checkout"}
-            </AnimatedButton>
+              <AnimatedButton
+                onClick={handleCheckOut}
+                className="w-full disabled:opacity-50 disabled:cursor-not-allowed"
+                size="lg"
+                rounded="lg"
+                variant={(priceBreakdown && priceBreakdown.distanceKm > 18.0) || inactiveCartItems.length > 0 ? "muted" : "primary"}
+                disabled={!!(priceBreakdown && priceBreakdown.distanceKm > 18.0) || checkingShopAvailability}
+              >
+                {checkingShopAvailability
+                  ? "Checking availability..."
+                  : priceBreakdown && priceBreakdown.distanceKm > 18.0
+                    ? "Undeliverable"
+                    : "Checkout"}
+              </AnimatedButton>
             </div>
           </div>
 
           {/* Desktop Cart Items Summary */}
           <div className="hidden lg:block">
-            <CartItemsSummary 
-              cartItems={checkOutDetails?.cartItems || []} 
-              totalPrice={priceBreakdown?.subtotal ?? checkOutDetails?.totalPrice ?? 0} 
+            <CartItemsSummary
+              cartItems={checkOutDetails?.cartItems || []}
+              totalPrice={priceBreakdown?.subtotal ?? checkOutDetails?.totalPrice ?? 0}
+              inactiveCartItems={inactiveCartItems}
             />
           </div>
         </div>
@@ -828,7 +912,7 @@ function MiniLeafletMap({ style, center, zoom = 13, marker, onMapClick, mapRefOu
         if (marker) {
           const { position, draggable = false, onDragEnd } = marker;
           if (!markerRef.current) {
-            const icon = leaflet.icon({ iconUrl: '/destination.png', iconSize: [32,32], iconAnchor: [16,32], popupAnchor: [0,-28] });
+            const icon = leaflet.icon({ iconUrl: '/destination.png', iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -28] });
             const m = leaflet.marker(position, { draggable, icon }).addTo(mapRef.current);
             if (draggable && onDragEnd) {
               m.on('dragend', (e) => onDragEnd(e.target.getLatLng()));
@@ -842,7 +926,7 @@ function MiniLeafletMap({ style, center, zoom = 13, marker, onMapClick, mapRefOu
           mapRef.current.removeLayer(markerRef.current);
           markerRef.current = null;
         }
-      } catch {}
+      } catch { }
     })();
   }, [center?.[0], center?.[1], zoom, marker?.position?.[0], marker?.position?.[1], marker?.draggable, onMapClick]);
 

@@ -7,14 +7,15 @@ import { useParams, useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import Link from "next/link";
 import ChatbotWidget from "../../../../components/ChatbotWidget.jsx";
- 
+import { FormControl, InputLabel, MenuItem, Select } from "@mui/material";
+
 import { Heart, Plus, Minus } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 function ShopItemsContent() {
   const { user } = useUser();
   const { isLoaded, isSignedIn, getToken } = useAuth();
- 
+
   const { shop_id } = useParams();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
 
@@ -50,7 +51,7 @@ function ShopItemsContent() {
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [categories, setCategories] = useState([]);
   const [sliderMaxCap, setSliderMaxCap] = useState(10000);
-  
+
   // Get unique values for filters
   const priceMin = 0;
   const priceMax = Math.max(...items.map(item => item.price || 0), 1000);
@@ -64,9 +65,21 @@ function ShopItemsContent() {
     { value: "newest", label: "Newest First" }
   ];
 
-  // Reset price range init when shop changes
+  // Reset filters and load state when shop changes
   useEffect(() => {
     setDidInitPriceRange(false);
+    setSearch('');
+    setSearchEmptyMessage('');
+    setPage(1);
+    setFilters({
+      categories: [],
+      priceRange: [0, 10000],
+      inStock: false,
+      sortBy: 'featured',
+      rating: 0,
+    });
+    setCategories([]);
+    setSliderMaxCap(10000);
   }, [shop_id]);
 
   const readFileAsBase64 = (file) => new Promise((resolve, reject) => {
@@ -134,7 +147,7 @@ function ShopItemsContent() {
             console.warn('Shop image search returned no items', { q });
             setSearchEmptyMessage('No items found for the image.');
           }
-        } catch (_) {}
+        } catch (_) { }
       }
     } catch (_) {
     } finally {
@@ -159,7 +172,7 @@ function ShopItemsContent() {
         const txt = String(ev.results?.[0]?.[0]?.transcript || '').trim();
         if (txt) onResult(txt);
       };
-      rec.onerror = () => {};
+      rec.onerror = () => { };
       rec.onend = () => onBusy(false);
       rec.start();
     } catch {
@@ -169,13 +182,18 @@ function ShopItemsContent() {
 
   // --- Fetch items (debounced) ---
   useEffect(() => {
-    if (!isLoaded || !isSignedIn || !user) return;
+    if (!isLoaded || !shop_id) return;
 
     let alive = true;
     const fetchItems = async () => {
       try {
         setLoading(true);
-        const token = await getToken();
+        let token;
+        try {
+          token = await getToken();
+        } catch {
+          token = null;
+        }
         const qs = new URLSearchParams();
         qs.set('page', String(page));
         qs.set('limit', String(limit));
@@ -187,8 +205,9 @@ function ShopItemsContent() {
         if (filters.rating > 0) qs.set('rating', String(filters.rating));
         if (filters.sortBy) qs.set('sort', filters.sortBy);
 
+        const headers = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await axios.get(`${API_URL}/api/customer/getShopItem/${shop_id}?${qs.toString()}`, {
-          headers: { Authorization: `Bearer ${token}` },
+          headers,
         });
 
         const payload = res?.data || {};
@@ -264,39 +283,39 @@ function ShopItemsContent() {
   // --- Animations ---
   const gridVariants = {
     hidden: { opacity: 0 },
-    show: { 
+    show: {
       opacity: 1,
-      transition: { 
+      transition: {
         staggerChildren: 0.05,
         when: "beforeChildren"
-      } 
+      }
     },
   };
 
   const cardVariants = {
-    hidden: { 
-      opacity: 0, 
+    hidden: {
+      opacity: 0,
       y: 20,
       scale: 0.98
     },
-    show: { 
-      opacity: 1, 
+    show: {
+      opacity: 1,
       y: 0,
       scale: 1,
-      transition: { 
-        type: "spring", 
-        stiffness: 100, 
+      transition: {
+        type: "spring",
+        stiffness: 100,
         damping: 15,
         mass: 0.5
-      } 
+      }
     },
-    hover: { 
+    hover: {
       y: -4,
       boxShadow: '0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-      transition: { 
-        duration: 0.2, 
-        ease: [0.4, 0, 0.2, 1] 
-      } 
+      transition: {
+        duration: 0.2,
+        ease: [0.4, 0, 0.2, 1]
+      }
     },
     tap: {
       scale: 0.98
@@ -403,7 +422,7 @@ function ShopItemsContent() {
   };
 
   return (
-  <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] px-6 sm:px-10 lg:px-20 relative">
+    <div className="min-h-screen bg-[var(--background)] text-[var(--foreground)] px-6 sm:px-10 lg:px-20 relative">
       {/* Header */}
       <div className="max-w-5xl mx-auto text-center mb-10">
         <h1 className="font-extrabold text-4xl sm:text-5xl md:text-6xl leading-tight tracking-tight text-[var(--foreground)]">
@@ -432,7 +451,7 @@ function ShopItemsContent() {
               <button
                 type="button"
                 aria-label="Voice search"
-                onClick={() => startVoice((t)=>setSearch(t), setSearchVoiceBusy)}
+                onClick={() => startVoice((t) => setSearch(t), setSearchVoiceBusy)}
                 className={`relative overflow-visible p-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60 disabled:opacity-50 ${searchVoiceBusy ? 'ring-2 ring-[var(--primary)]/40' : ''}`}
                 disabled={searchVoiceBusy}
               >
@@ -460,17 +479,17 @@ function ShopItemsContent() {
                   animate={searchVoiceBusy ? { y: [0, -1.5, 0] } : {}}
                   transition={{ duration: 0.9, repeat: Infinity, ease: 'easeInOut' }}
                 >
-                  <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3z"/>
-                  <path d="M19 11a7 7 0 11-14 0h2a5 5 0 1010 0h2z"/>
-                  <path d="M13 19.95V22h-2v-2.05a8.001 8.001 0 01-6.32-6.9l1.99-.2A6.002 6.002 0 0012 18a6.002 6.002 0 005.33-3.15l1.99.2A8.001 8.001 0 0113 19.95z"/>
+                  <path d="M12 14a3 3 0 003-3V7a3 3 0 10-6 0v4a3 3 0 003 3z" />
+                  <path d="M19 11a7 7 0 11-14 0h2a5 5 0 1010 0h2z" />
+                  <path d="M13 19.95V22h-2v-2.05a8.001 8.001 0 01-6.32-6.9l1.99-.2A6.002 6.002 0 0012 18a6.002 6.002 0 005.33-3.15l1.99.2A8.001 8.001 0 0113 19.95z" />
                 </motion.svg>
               </button>
               <div className="relative">
-                <button type="button" aria-haspopup="menu" aria-expanded={searchAiOpen} onClick={() => setSearchAiOpen((o)=>!o)} className="p-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60 disabled:opacity-50" disabled={searchAiBusy}>
+                <button type="button" aria-haspopup="menu" aria-expanded={searchAiOpen} onClick={() => setSearchAiOpen((o) => !o)} className="p-1 rounded-md border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60 disabled:opacity-50" disabled={searchAiBusy}>
                   {searchAiBusy ? (
                     <motion.span className="inline-block h-4 w-4 rounded-full border-2 border-[var(--primary)] border-t-transparent" animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }} />
                   ) : (
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M4 7a2 2 0 012-2h2l1-2h6l1 2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z"/><path d="M8 13l2.5-3 2 2.5L15 10l3 4H8z"/></svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-4 h-4"><path d="M4 7a2 2 0 012-2h2l1-2h6l1 2h2a2 2 0 012 2v10a2 2 0 01-2 2H6a2 2 0 01-2-2V7z" /><path d="M8 13l2.5-3 2 2.5L15 10l3 4H8z" /></svg>
                   )}
                 </button>
                 {searchAiOpen && (
@@ -479,8 +498,8 @@ function ShopItemsContent() {
                     <button type="button" className="w-full text-left px-3 py-2 hover:bg-[var(--muted)]/50" onClick={() => searchUploadRef.current && searchUploadRef.current.click()} disabled={searchAiBusy}>Upload Photo</button>
                   </div>
                 )}
-                <input ref={searchCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e)=> onSearchImageChosen(e.target.files?.[0])} />
-                <input ref={searchUploadRef} type="file" accept="image/*" className="hidden" onChange={(e)=> onSearchImageChosen(e.target.files?.[0])} />
+                <input ref={searchCameraRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onSearchImageChosen(e.target.files?.[0])} />
+                <input ref={searchUploadRef} type="file" accept="image/*" className="hidden" onChange={(e) => onSearchImageChosen(e.target.files?.[0])} />
               </div>
             </div>
           </div>
@@ -490,7 +509,7 @@ function ShopItemsContent() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => setIsFilterOpen(!isFilterOpen)}
-                className="flex items-center gap-2 px-4 py-2 bg-[var(--card)] hover:bg-[var(--muted)] text-[var(--foreground)] border border-[var(--border)] rounded-full transition-colors"
+                className="flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--card)] px-4 py-2 text-[var(--foreground)] shadow-sm transition duration-200 ease-in-out hover:border-[var(--primary)] hover:bg-[var(--background)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
@@ -502,8 +521,8 @@ function ShopItemsContent() {
                   || filters.rating > 0
                   || filters.inStock
                   || filters.sortBy !== 'featured') && (
-                  <span className="w-2 h-2 bg-[var(--primary)] rounded-full"></span>
-                )}
+                    <span className="w-2 h-2 bg-[var(--primary)] rounded-full"></span>
+                  )}
               </button>
               <span className="text-sm text-[var(--muted-foreground)]">
                 {total} {total === 1 ? 'item' : 'items'} found
@@ -511,180 +530,195 @@ function ShopItemsContent() {
             </div>
 
             <div className="w-full sm:w-48">
-              <select
-                value={filters.sortBy}
-                onChange={(e) => setFilters({...filters, sortBy: e.target.value})}
-                className="w-full px-4 py-2 bg-[var(--card)] text-[var(--foreground)] border border-[var(--border)] rounded-full focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/30"
-              >
-                {sortOptions.map((option) => (
-                  <option key={option.value} value={option.value}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
+              <FormControl fullWidth size="small" sx={{ minWidth: 170, borderRadius: '9999px', backgroundColor: 'var(--card)', '& .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--border)' }, '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: 'var(--primary)' }, '& .MuiSvgIcon-root': { color: 'var(--muted-foreground)' } }}>
+                <InputLabel id="sort-by-label" sx={{ color: 'var(--muted-foreground)' }}>Sort by</InputLabel>
+                <Select
+                  labelId="sort-by-label"
+                  id="sort-by"
+                  value={filters.sortBy}
+                  label="Sort by"
+                  onChange={(e) => setFilters({ ...filters, sortBy: e.target.value })}
+                  sx={{ borderRadius: '9999px', color: 'var(--foreground)' }}
+                  MenuProps={{
+                    PaperProps: {
+                      sx: {
+                        backgroundColor: 'var(--card)',
+                        color: 'var(--foreground)',
+                        border: '1px solid var(--border)',
+                      },
+                    },
+                  }}
+                >
+                  {sortOptions.map((option) => (
+                    <MenuItem key={option.value} value={option.value} sx={{ color: 'var(--foreground)' }}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
             </div>
           </div>
 
           {/* Filter Panel */}
           <AnimatePresence initial={false}>
-          {isFilterOpen && (
-            <motion.div
-              key="filters-panel"
-              initial={{ opacity: 0, y: -8, scale: 0.98 }}
-              animate={{ opacity: 1, y: 0, scale: 1 }}
-              exit={{ opacity: 0, y: -8, scale: 0.98 }}
-              transition={{ duration: 0.25, ease: 'easeOut' }}
-              className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 shadow-lg overflow-hidden"
-            >
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                {/* Category Filter (multi-select) */}
-                <div>
-                  <h3 className="font-medium mb-3 text-[var(--foreground)]">Categories</h3>
-                  <div className="flex flex-wrap gap-2">
-                    {categories.map((cat) => {
-                      const active = filters.categories.includes(cat);
-                      return (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => {
-                            setFilters((prev) => {
-                              const set = new Set(prev.categories);
-                              if (set.has(cat)) set.delete(cat); else set.add(cat);
-                              return { ...prev, categories: Array.from(set) };
-                            });
-                          }}
-                          className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${active ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)] hover:bg-[var(--muted)]/70'}`}
-                        >
-                          {cat}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-
-                {/* Price Range Filter */}
-                <div>
-                  <h3 className="font-medium mb-3 text-[var(--foreground)]">
-                    Price Range: ₹{filters.priceRange[0]} - ₹{filters.priceRange[1]}
-                  </h3>
-                  <div className="px-2">
-                    <input
-                      type="range"
-                      min={priceMin}
-                      max={sliderMaxCap}
-                      value={Math.min(filters.priceRange[1] ?? 0, sliderMaxCap)}
-                      onChange={(e) => setFilters({
-                        ...filters,
-                        priceRange: [filters.priceRange[0], parseInt(e.target.value)]
+            {isFilterOpen && (
+              <motion.div
+                key="filters-panel"
+                initial={{ opacity: 0, y: -8, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.98 }}
+                transition={{ duration: 0.25, ease: 'easeOut' }}
+                className="bg-[var(--card)] border border-[var(--border)] rounded-xl p-6 shadow-lg overflow-hidden"
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Category Filter (multi-select) */}
+                  <div>
+                    <h3 className="font-medium mb-3 text-[var(--foreground)]">Categories</h3>
+                    <div className="flex flex-wrap gap-2">
+                      {categories.map((cat) => {
+                        const active = filters.categories.includes(cat);
+                        return (
+                          <button
+                            key={cat}
+                            type="button"
+                            onClick={() => {
+                              setFilters((prev) => {
+                                const set = new Set(prev.categories);
+                                if (set.has(cat)) set.delete(cat); else set.add(cat);
+                                return { ...prev, categories: Array.from(set) };
+                              });
+                            }}
+                            className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors ${active ? 'bg-[var(--primary)] text-[var(--primary-foreground)] border-[var(--primary)]' : 'bg-[var(--muted)] text-[var(--muted-foreground)] border-[var(--border)] hover:bg-[var(--muted)]/70'}`}
+                          >
+                            {cat}
+                          </button>
+                        );
                       })}
-                      className="w-full h-2 bg-[var(--muted)] rounded-lg appearance-none cursor-pointer"
-                    />
-                    <div className="flex justify-between text-xs text-[var(--muted-foreground)] mt-1">
-                      <span>₹{priceMin}</span>
-                      <span>₹{sliderMaxCap}+</span>
                     </div>
-                    <div className="mt-4 grid grid-cols-2 gap-3">
-                      <div className="flex flex-col col-span-2 sm:col-span-1">
-                        <label className="text-xs text-[var(--muted-foreground)] mb-1">Max</label>
-                        <input
-                          type="number"
-                          min={filters.priceRange[0]}
-                          max={9999999}
-                          value={sliderMaxCap}
-                          onChange={(e) => {
-                            const raw = Number(e.target.value || 0);
-                            const cap = Math.max(filters.priceRange[0], raw);
-                            setSliderMaxCap(cap);
-                            setFilters({ ...filters, priceRange: [filters.priceRange[0], Math.min(filters.priceRange[1], cap)] });
-                          }}
-                          inputMode="numeric"
-                          step={1}
-                          onKeyDown={(e) => { if (["e","E","+","-","."].includes(e.key)) e.preventDefault(); }}
-                          className="px-3 py-2 w-28 text-right rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30"
-                        />
+                  </div>
+
+                  {/* Price Range Filter */}
+                  <div>
+                    <h3 className="font-medium mb-3 text-[var(--foreground)]">
+                      Price Range: ₹{filters.priceRange[0]} - ₹{filters.priceRange[1]}
+                    </h3>
+                    <div className="px-2">
+                      <input
+                        type="range"
+                        min={priceMin}
+                        max={sliderMaxCap}
+                        value={Math.min(filters.priceRange[1] ?? 0, sliderMaxCap)}
+                        onChange={(e) => setFilters({
+                          ...filters,
+                          priceRange: [filters.priceRange[0], parseInt(e.target.value)]
+                        })}
+                        className="w-full h-2 bg-[var(--muted)] rounded-lg appearance-none cursor-pointer"
+                      />
+                      <div className="flex justify-between text-xs text-[var(--muted-foreground)] mt-1">
+                        <span>₹{priceMin}</span>
+                        <span>₹{sliderMaxCap}+</span>
+                      </div>
+                      <div className="mt-4 grid grid-cols-2 gap-3">
+                        <div className="flex flex-col col-span-2 sm:col-span-1">
+                          <label className="text-xs text-[var(--muted-foreground)] mb-1">Max</label>
+                          <input
+                            type="number"
+                            min={filters.priceRange[0]}
+                            max={9999999}
+                            value={sliderMaxCap}
+                            onChange={(e) => {
+                              const raw = Number(e.target.value || 0);
+                              const cap = Math.max(filters.priceRange[0], raw);
+                              setSliderMaxCap(cap);
+                              setFilters({ ...filters, priceRange: [filters.priceRange[0], Math.min(filters.priceRange[1], cap)] });
+                            }}
+                            inputMode="numeric"
+                            step={1}
+                            onKeyDown={(e) => { if (["e", "E", "+", "-", "."].includes(e.key)) e.preventDefault(); }}
+                            className="px-3 py-2 w-28 text-right rounded-lg border border-[var(--border)] bg-[var(--card)] text-[var(--foreground)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30"
+                          />
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
 
-                {/* Rating Filter */}
-                <div>
-                  <h3 className="font-medium mb-3 text-[var(--foreground)]">Rating</h3>
-                  <div className="space-y-2">
-                    {[0, ...ratings].map((rating) => (
-                      <div key={rating} className="flex items-center">
-                        <input
-                          type="radio"
-                          id={`rating-${rating}`}
-                          name="rating"
-                          checked={filters.rating === rating}
-                          onChange={() => setFilters({...filters, rating})}
-                          className="h-4 w-4 text-[var(--primary)] focus:ring-[var(--primary)] border-[var(--border)]"
-                        />
-                        <label htmlFor={`rating-${rating}`} className="ml-2 flex items-center cursor-pointer">
-                          {rating === 0 ? (
-                            <span className="text-sm">All Ratings</span>
-                          ) : (
-                            <>
-                              {[...Array(5)].map((_, i) => (
-                                <svg
-                                  key={i}
-                                  className={`w-4 h-4 ${i < rating ? 'text-yellow-400' : 'text-gray-300'}`}
-                                  fill="currentColor"
-                                  viewBox="0 0 20 20"
-                                  xmlns="http://www.w3.org/2000/svg"
-                                >
-                                  <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
-                                </svg>
-                              ))}
-                              <span className="ml-1 text-xs text-[var(--muted-foreground)]">& Up</span>
-                            </>
-                          )}
-                        </label>
-                      </div>
-                    ))}
+                  {/* Rating Filter */}
+                  <div>
+                    <h3 className="font-medium mb-3 text-[var(--foreground)]">Rating</h3>
+                    <div className="space-y-2">
+                      {[0, ...ratings].map((rating) => (
+                        <div key={rating} className="flex items-center">
+                          <input
+                            type="radio"
+                            id={`rating-${rating}`}
+                            name="rating"
+                            checked={filters.rating === rating}
+                            onChange={() => setFilters({ ...filters, rating })}
+                            className="h-4 w-4 text-[var(--primary)] focus:ring-[var(--primary)] border-[var(--border)]"
+                          />
+                          <label htmlFor={`rating-${rating}`} className="ml-2 flex items-center cursor-pointer">
+                            {rating === 0 ? (
+                              <span className="text-sm">All Ratings</span>
+                            ) : (
+                              <>
+                                {[...Array(5)].map((_, i) => (
+                                  <svg
+                                    key={i}
+                                    className={`w-4 h-4 ${i < rating ? 'text-yellow-400' : 'text-gray-300'}`}
+                                    fill="currentColor"
+                                    viewBox="0 0 20 20"
+                                    xmlns="http://www.w3.org/2000/svg"
+                                  >
+                                    <path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" />
+                                  </svg>
+                                ))}
+                                <span className="ml-1 text-xs text-[var(--muted-foreground)]">& Up</span>
+                              </>
+                            )}
+                          </label>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Stock Status */}
+                  <div>
+                    <h3 className="font-medium mb-3 text-[var(--foreground)]">Stock Status</h3>
+                    <div className="flex items-center space-x-2">
+                      <input
+                        type="checkbox"
+                        id="inStock"
+                        checked={filters.inStock}
+                        onChange={(e) => setFilters({ ...filters, inStock: e.target.checked })}
+                        className="h-4 w-4 text-[var(--primary)] focus:ring-[var(--primary)] border-[var(--border)] rounded"
+                      />
+                      <label htmlFor="inStock" className="text-sm cursor-pointer">In Stock Only</label>
+                    </div>
                   </div>
                 </div>
 
-                {/* Stock Status */}
-                <div>
-                  <h3 className="font-medium mb-3 text-[var(--foreground)]">Stock Status</h3>
-                  <div className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      id="inStock"
-                      checked={filters.inStock}
-                      onChange={(e) => setFilters({...filters, inStock: e.target.checked})}
-                      className="h-4 w-4 text-[var(--primary)] focus:ring-[var(--primary)] border-[var(--border)] rounded"
-                    />
-                    <label htmlFor="inStock" className="text-sm cursor-pointer">In Stock Only</label>
-                  </div>
+                <div className="mt-6 flex justify-end space-x-3">
+                  <button
+                    onClick={() => setFilters({
+                      categories: [],
+                      priceRange: [priceMin, priceMax],
+                      inStock: false,
+                      sortBy: "featured",
+                      rating: 0
+                    })}
+                    className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
+                  >
+                    Reset Filters
+                  </button>
+                  <button
+                    onClick={() => setIsFilterOpen(false)}
+                    className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-medium rounded-full hover:bg-[var(--primary)]/90 transition-colors"
+                  >
+                    Apply Filters
+                  </button>
                 </div>
-              </div>
-
-              <div className="mt-6 flex justify-end space-x-3">
-                <button
-                  onClick={() => setFilters({
-                    categories: [],
-                    priceRange: [priceMin, priceMax],
-                    inStock: false,
-                    sortBy: "featured",
-                    rating: 0
-                  })}
-                  className="px-4 py-2 text-sm font-medium text-[var(--muted-foreground)] hover:text-[var(--foreground)] transition-colors"
-                >
-                  Reset Filters
-                </button>
-                <button
-                  onClick={() => setIsFilterOpen(false)}
-                  className="px-4 py-2 bg-[var(--primary)] text-white text-sm font-medium rounded-full hover:bg-[var(--primary)]/90 transition-colors"
-                >
-                  Apply Filters
-                </button>
-              </div>
-            </motion.div>
-          )}
+              </motion.div>
+            )}
           </AnimatePresence>
         </div>
       </div>
@@ -723,7 +757,7 @@ function ShopItemsContent() {
                     rating: 0
                   });
                 }}
-                className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-full shadow-sm text-white bg-[var(--primary)] hover:bg-[var(--primary)]/90 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[var(--primary)]"
+                className="inline-flex items-center px-4 py-2 border border-[var(--border)] text-sm font-medium rounded-full shadow-sm text-[var(--foreground)] bg-[var(--card)] hover:bg-[var(--muted)] focus:outline-none focus:ring-2 focus:ring-[var(--primary)]/20"
               >
                 Clear all filters
               </button>
@@ -731,87 +765,87 @@ function ShopItemsContent() {
           </div>
         ) : (
           <motion.div initial={false} animate="show" variants={gridVariants} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          <AnimatePresence>
-            {displayedItems.length > 0 ? (
-              displayedItems.map((item) => (
-                <motion.div
-                  key={item.id}
-                  variants={cardVariants}
-                  whileHover="hover"
-                  className="group relative bg-[var(--card)] text-[var(--card-foreground)] rounded-2xl shadow-sm overflow-hidden border border-[var(--border)] hover:shadow-md transition-all"
-                >
-                  <motion.div whileTap={{ scale: 0.99 }} className="overflow-hidden">
-                    <div className="relative h-44 md:h-48 bg-[var(--muted)] overflow-hidden rounded-t-2xl">
-                      <Link href={`/customer/getShops/${shop_id}/item/${item.id}`} className="absolute inset-0 block" />
-                      <img
-                        src={item.images?.[0]?.url || "/placeholder.png"}
-                        alt={item.name}
-                        className="w-full h-full object-cover object-center"
-                      />
-                      <button
-                        type="button"
-                        onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(item.id); }}
-                        className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80"
-                        aria-pressed={wishlistIds.has(item.id)}
-                      >
-                        <Heart className={wishlistIds.has(item.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(item.id) ? "currentColor" : "none"} size={18} />
-                      </button>
-                    </div>
-
-                    <div className="bg-[var(--card)] p-4 md:p-5">
-                      <div className="flex items-start justify-between gap-3 mb-2">
-                        <h3 className="text-[var(--card-foreground)] text-lg md:text-xl font-semibold truncate">{item.name}</h3>
-                        <p className="text-md font-bold text-[var(--primary)]">₹{item.price}</p>
-                      </div>
-                      <p className="text-sm text-[var(--muted-foreground)] line-clamp-2">{item.description}</p>
-
-                      <div className="mt-3 flex flex-wrap gap-2 min-h-[28px]">
-                        {item.category?.map((cat, i) => (
-                          <span key={i} className="text-xs font-semibold px-3 py-1 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">{cat}</span>
-                        ))}
+            <AnimatePresence>
+              {displayedItems.length > 0 ? (
+                displayedItems.map((item) => (
+                  <motion.div
+                    key={item.id}
+                    variants={cardVariants}
+                    whileHover="hover"
+                    className="group relative bg-[var(--card)] text-[var(--card-foreground)] rounded-2xl shadow-sm overflow-hidden border border-[var(--border)] hover:shadow-md transition-all"
+                  >
+                    <motion.div whileTap={{ scale: 0.99 }} className="overflow-hidden">
+                      <div className="relative h-44 md:h-48 bg-[var(--muted)] overflow-hidden rounded-t-2xl">
+                        <Link href={`/customer/getShops/${shop_id}/item/${item.id}`} className="absolute inset-0 block" />
+                        <img
+                          src={item.images?.[0]?.url || "/placeholder.png"}
+                          alt={item.name}
+                          className="w-full h-full object-cover object-center"
+                        />
+                        <button
+                          type="button"
+                          onClick={(e) => { e.preventDefault(); e.stopPropagation(); toggleWishlist(item.id); }}
+                          className="absolute top-2 right-2 p-2 rounded-full bg-[var(--card)]/90 border border-[var(--border)] shadow-sm hover:bg-[var(--muted)]/80"
+                          aria-pressed={wishlistIds.has(item.id)}
+                        >
+                          <Heart className={wishlistIds.has(item.id) ? "text-red-500" : "text-[var(--foreground)]"} fill={wishlistIds.has(item.id) ? "currentColor" : "none"} size={18} />
+                        </button>
                       </div>
 
-                      <div className="mt-4 flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2">
-                          <button
-                            type="button"
-                            onClick={() => decQty(item.id)}
-                            aria-label="Decrease quantity"
-                            className="h-9 w-9 grid place-items-center rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60"
-                          >
-                            <Minus className="w-4 h-4" />
-                          </button>
-                          <div className="min-w-10 px-2 h-9 grid place-items-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm font-semibold">
-                            {getQty(item.id)}
+                      <div className="bg-[var(--card)] p-4 md:p-5">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <h3 className="text-[var(--card-foreground)] text-lg md:text-xl font-semibold truncate">{item.name}</h3>
+                          <p className="text-md font-bold text-[var(--primary)]">₹{item.price}</p>
+                        </div>
+                        <p className="text-sm text-[var(--muted-foreground)] line-clamp-2">{item.description}</p>
+
+                        <div className="mt-3 flex flex-wrap gap-2 min-h-[28px]">
+                          {item.category?.map((cat, i) => (
+                            <span key={i} className="text-xs font-semibold px-3 py-1 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">{cat}</span>
+                          ))}
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              onClick={() => decQty(item.id)}
+                              aria-label="Decrease quantity"
+                              className="h-9 w-9 grid place-items-center rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60"
+                            >
+                              <Minus className="w-4 h-4" />
+                            </button>
+                            <div className="min-w-10 px-2 h-9 grid place-items-center rounded-lg border border-[var(--border)] bg-[var(--card)] text-sm font-semibold">
+                              {getQty(item.id)}
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => incQty(item.id)}
+                              aria-label="Increase quantity"
+                              className="h-9 w-9 grid place-items-center rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60"
+                            >
+                              <Plus className="w-4 h-4" />
+                            </button>
                           </div>
                           <button
                             type="button"
-                            onClick={() => incQty(item.id)}
-                            aria-label="Increase quantity"
-                            className="h-9 w-9 grid place-items-center rounded-lg border border-[var(--border)] bg-[var(--card)] hover:bg-[var(--muted)]/60"
+                            onClick={() => addToCartQuick(item.id)}
+                            className="px-4 py-2 rounded-lg bg-[var(--foreground)] text-[var(--background)] font-semibold hover:opacity-90"
                           >
-                            <Plus className="w-4 h-4" />
+                            Add
                           </button>
                         </div>
-                        <button
-                          type="button"
-                          onClick={() => addToCartQuick(item.id)}
-                          className="px-4 py-2 rounded-lg bg-[var(--foreground)] text-[var(--background)] font-semibold hover:opacity-90"
-                        >
-                          Add
-                        </button>
                       </div>
-                    </div>
+                    </motion.div>
                   </motion.div>
-                </motion.div>
-              ))
-            ) : (
-              <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-full text-center text-[var(--muted-foreground)] mt-8">
-                No items found.
-              </motion.p>
-            )}
-          </AnimatePresence>
-        </motion.div>
+                ))
+              ) : (
+                <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="col-span-full text-center text-[var(--muted-foreground)] mt-8">
+                  No items found.
+                </motion.p>
+              )}
+            </AnimatePresence>
+          </motion.div>
         )}
       </div>
 

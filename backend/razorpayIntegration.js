@@ -5,6 +5,10 @@ import supabase from "./db.js";
 import { Clerk } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import {
+  getCartShopAvailability,
+  INACTIVE_SHOP_CART_MESSAGE,
+} from "./utils/shopAvailability.js";
 
 dotenv.config();
 
@@ -100,8 +104,19 @@ async function createOrderAfterPayment({ clerkId, addressId, cartId, razorpayOrd
     throw new Error("Cart items not found or already processed");
   }
 
-  const shopId = cartItems[0].Items?.shop_id;
-  const subtotal = cartItems.reduce((sum, item) => sum + (item.Items?.price || 0) * item.quantity, 0);
+  const {
+    cartItems: cartItemsWithShopStatus,
+    inactiveCartItems,
+  } = await getCartShopAvailability(cartItems);
+
+  if (inactiveCartItems.length > 0) {
+    const error = new Error(INACTIVE_SHOP_CART_MESSAGE);
+    error.inactiveCartItems = inactiveCartItems;
+    throw error;
+  }
+
+  const shopId = cartItemsWithShopStatus[0].Items?.shop_id;
+  const subtotal = cartItemsWithShopStatus.reduce((sum, item) => sum + (item.Items?.price || 0) * item.quantity, 0);
 
   // 4. Fetch address
   const { data: address } = await supabase
@@ -180,7 +195,7 @@ async function createOrderAfterPayment({ clerkId, addressId, cartId, razorpayOrd
 
   // 9. Update sold quantities
   await Promise.all(
-    cartItems.map(async ({ item_id, quantity }) => {
+    cartItemsWithShopStatus.map(async ({ item_id, quantity }) => {
       const { data: item } = await supabase
         .from("Items")
         .select("sold_qt")
@@ -247,8 +262,20 @@ async function createRazorpayOrderHandler(req, res) {
       return res.status(400).json({ error: "Cart is empty or failed to load" });
     }
 
-    const shopId = cartItems[0].Items?.shop_id;
-    const subtotal = cartItems.reduce((sum, item) => {
+    const {
+      cartItems: cartItemsWithShopStatus,
+      inactiveCartItems,
+    } = await getCartShopAvailability(cartItems);
+
+    if (inactiveCartItems.length > 0) {
+      return res.status(400).json({
+        error: INACTIVE_SHOP_CART_MESSAGE,
+        inactiveCartItems,
+      });
+    }
+
+    const shopId = cartItemsWithShopStatus[0].Items?.shop_id;
+    const subtotal = cartItemsWithShopStatus.reduce((sum, item) => {
       const itemPrice = item.Items?.price || 0;
       const itemQty = item.quantity || 0;
       return sum + (itemPrice * itemQty);
@@ -373,6 +400,12 @@ async function verifyPaymentHandler(req, res) {
     return res.json({ success: true, orderId: order.id });
   } catch (error) {
     console.error("Payment verification error:", error);
+    if (error.message === INACTIVE_SHOP_CART_MESSAGE) {
+      return res.status(400).json({
+        error: INACTIVE_SHOP_CART_MESSAGE,
+        inactiveCartItems: error.inactiveCartItems || [],
+      });
+    }
     return res.status(500).json({ error: "Verification failed", details: error.message });
   }
 }

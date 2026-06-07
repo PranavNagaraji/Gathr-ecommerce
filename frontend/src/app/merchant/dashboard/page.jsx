@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
+import ReactDOM from "react-dom";
 import { useUser, useAuth } from "@clerk/nextjs";
 import { useRouter } from "next/navigation";
 import axios from "axios";
@@ -122,9 +123,26 @@ export default function Dashboard() {
     const router = useRouter();
     const [items, setItems] = useState([]);
     const [banInfo, setBanInfo] = useState({ banned: false, reason: null, loading: true });
+    const [shopStatus, setShopStatus] = useState({
+        active: true,
+        loading: true,
+        updating: false,
+        error: "",
+    });
+    const [confirmDeactivateOpen, setConfirmDeactivateOpen] = useState(false);
     const { getToken, isLoaded, isSignedIn } = useAuth();
     const { user } = useUser();
     const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
+
+    useEffect(() => {
+        if (confirmDeactivateOpen) {
+            document.body.style.overflow = "hidden";
+            return () => {
+                document.body.style.overflow = "";
+            };
+        }
+        document.body.style.overflow = "";
+    }, [confirmDeactivateOpen]);
 
     // Items are fetched to power low-stock warnings and performance, not listed here
     const [loading, setLoading] = useState(true);
@@ -179,8 +197,40 @@ export default function Dashboard() {
             }
         };
 
+        const getShopStatus = async () => {
+            if (!isLoaded || !isSignedIn || !user) return;
+            try {
+                setShopStatus((prev) => ({ ...prev, loading: true, error: "" }));
+                const token = await getToken();
+                const result = await axios.post(
+                    `${API_URL}/api/merchant/get_shop`,
+                    { owner_id: user.id },
+                    {
+                        headers: {
+                            "Content-Type": "application/json",
+                            Authorization: `Bearer ${token}`,
+                        },
+                    }
+                );
+                setShopStatus({
+                    active: result.data?.shop?.active !== false,
+                    loading: false,
+                    updating: false,
+                    error: "",
+                });
+            } catch (err) {
+                setShopStatus((prev) => ({
+                    ...prev,
+                    loading: false,
+                    updating: false,
+                    error: err.response?.data?.message || "Unable to load shop status.",
+                }));
+            }
+        };
+
         checkShop();
         getItems();
+        getShopStatus();
         // Fetch ALL orders for analytics (full history)
         (async () => {
             if (!isLoaded || !isSignedIn || !user) return;
@@ -238,14 +288,14 @@ export default function Dashboard() {
         try {
             const v = Number(localStorage.getItem(`lowStockThreshold:${user?.id}`));
             if (!Number.isNaN(v) && v >= 0) setLowThreshold(v);
-        } catch {}
+        } catch { }
     }, [isLoaded, isSignedIn, user, router, API_URL, getToken]);
 
     // Low-stock warnings
     const lowStockItems = useMemo(() => {
         const THRESHOLD = Number(lowThreshold) || 5;
         return (items || []).filter((it) => (Number(it?.quantity) || 0) <= THRESHOLD)
-            .sort((a,b) => (a.quantity||0) - (b.quantity||0)).slice(0, 8);
+            .sort((a, b) => (a.quantity || 0) - (b.quantity || 0)).slice(0, 8);
     }, [items, lowThreshold]);
 
     // --- Analytics: compute from orders ---
@@ -303,16 +353,16 @@ export default function Dashboard() {
         };
         if (revenueRange === '7d') {
             const s = buildLastNDays(7);
-            return { labels: s.map(d=>d.label), values: s.map(d=>d.value) };
+            return { labels: s.map(d => d.label), values: s.map(d => d.value) };
         }
         if (revenueRange === '30d') {
             const s = buildLastNDays(30);
-            return { labels: s.map(d=>d.label), values: s.map(d=>d.value) };
+            return { labels: s.map(d => d.label), values: s.map(d => d.value) };
         }
         // all time
-        const all = Array.from(revenueByDate.entries()).sort((a,b)=> a[0].localeCompare(b[0]))
-          .map(([key,val]) => ({ label: new Date(key).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }), value: val }));
-        return { labels: all.map(d=>d.label), values: all.map(d=>d.value) };
+        const all = Array.from(revenueByDate.entries()).sort((a, b) => a[0].localeCompare(b[0]))
+            .map(([key, val]) => ({ label: new Date(key).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: '2-digit' }), value: val }));
+        return { labels: all.map(d => d.label), values: all.map(d => d.value) };
     }, [revenueByDate, revenueRange]);
     const topItems = useMemo(() => {
         const map = new Map();
@@ -329,7 +379,7 @@ export default function Dashboard() {
                 map.set(id, prev);
             }
         }
-        return Array.from(map.values()).sort((a,b)=>b.revenue - a.revenue).slice(0,5);
+        return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
     }, [paidOrders]);
 
     // Payment method distribution (paid orders)
@@ -362,7 +412,7 @@ export default function Dashboard() {
         for (const o of orders || []) {
             const d = new Date(o?.created_at);
             if (isNaN(d)) continue;
-            const key = d.toISOString().slice(0,10);
+            const key = d.toISOString().slice(0, 10);
             map.set(key, (map.get(key) || 0) + 1);
         }
         const days = [];
@@ -370,7 +420,7 @@ export default function Dashboard() {
         for (let i = 6; i >= 0; i--) {
             const d = new Date(today);
             d.setDate(today.getDate() - i);
-            const key = d.toISOString().slice(0,10);
+            const key = d.toISOString().slice(0, 10);
             const label = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short' });
             days.push({ key, label, value: map.get(key) || 0 });
         }
@@ -389,8 +439,8 @@ export default function Dashboard() {
                 for (const c of cats) counts.set(c, (counts.get(c) || 0) + qty);
             }
         }
-        const arr = Array.from(counts.entries()).sort((a,b)=>b[1]-a[1]).slice(0,6);
-        const total = arr.reduce((s, [,v])=>s+v, 0) || 1;
+        const arr = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+        const total = arr.reduce((s, [, v]) => s + v, 0) || 1;
         return { total, arr };
     }, [paidOrders]);
 
@@ -422,295 +472,436 @@ export default function Dashboard() {
                 }
             }
         }
-        return predictions.sort((a,b) => a.daysLeft - b.daysLeft).slice(0, 8);
+        return predictions.sort((a, b) => a.daysLeft - b.daysLeft).slice(0, 8);
     }, [items, paidOrders]);
 
+    const updateShopStatus = async (nextActive) => {
+        try {
+            setShopStatus((prev) => ({ ...prev, updating: true, error: "" }));
+            const token = await getToken();
+            const result = await axios.put(
+                `${API_URL}/api/merchant/update_shop_active`,
+                { owner_id: user.id, active: nextActive },
+                {
+                    headers: {
+                        "Content-Type": "application/json",
+                        Authorization: `Bearer ${token}`,
+                    },
+                }
+            );
+
+            setShopStatus({
+                active: result.data?.shop?.active !== false,
+                loading: false,
+                updating: false,
+                error: "",
+            });
+        } catch (err) {
+            setShopStatus((prev) => ({
+                ...prev,
+                updating: false,
+                error: err.response?.data?.message || "Failed to update shop status.",
+            }));
+        }
+    };
+
+    const handleShopStatusToggle = async () => {
+        if (!user || shopStatus.loading || shopStatus.updating) return;
+
+        const nextActive = !shopStatus.active;
+        if (!nextActive) {
+            setConfirmDeactivateOpen(true);
+            return;
+        }
+
+        await updateShopStatus(nextActive);
+    };
+
+    const confirmDeactivate = async () => {
+        setConfirmDeactivateOpen(false);
+        await updateShopStatus(false);
+    };
+
+    const cancelDeactivate = () => {
+        setConfirmDeactivateOpen(false);
+    };
+
+    const confirmationModal = confirmDeactivateOpen
+        ? ReactDOM.createPortal(
+            <AnimatePresence>
+                <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 p-4"
+                >
+                    <motion.div
+                        initial={{ y: 20, opacity: 0 }}
+                        animate={{ y: 0, opacity: 1 }}
+                        exit={{ y: 20, opacity: 0 }}
+                        transition={{ duration: 0.2 }}
+                        className="fixed top-1/2 left-1/2 z-[10000] w-full max-w-md -translate-x-1/2 -translate-y-1/2 rounded-3xl border border-[var(--border)] bg-[var(--card)] p-6 shadow-2xl"
+                    >
+                        <h3 className="text-lg font-semibold text-[var(--foreground)]">Confirm shop deactivation</h3>
+                        <p className="mt-3 text-sm leading-6 text-[var(--muted-foreground)]">
+                            Marking your shop as inactive will hide it from customers and block new orders. Continue?
+                        </p>
+                        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
+                            <button
+                                type="button"
+                                onClick={cancelDeactivate}
+                                className="rounded-full border border-[var(--border)] bg-[var(--background)] px-4 py-2 text-sm text-[var(--foreground)] transition hover:bg-[var(--muted)]/60"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="button"
+                                onClick={confirmDeactivate}
+                                disabled={shopStatus.updating}
+                                className="rounded-full bg-[var(--destructive)] px-4 py-2 text-sm font-semibold text-white transition hover:bg-[var(--destructive)]/90 disabled:opacity-60"
+                            >
+                                Deactivate shop
+                            </button>
+                        </div>
+                    </motion.div>
+                </motion.div>
+            </AnimatePresence>,
+            document.body
+        )
+        : null;
+
     return (
-        <motion.div
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.25 }}
-            className="flex flex-col items-center w-full min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 md:p-8"
-        >
-            <div className="w-full max-w-7xl mx-auto">
-                {banInfo.banned && (
-                    <div className="mb-4 p-4 rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,var(--destructive),white_90%)] text-[var(--destructive)]">
-                        <div className="font-semibold">Your shop is currently banned.</div>
-                        {banInfo.reason && <div className="text-sm mt-1">Reason: {String(banInfo.reason)}</div>}
-                        <a href="/about" className="inline-block mt-2 text-xs underline">Contact support</a>
-                    </div>
-                )}
-                <div className="mt-12 flex flex-col md:flex-row justify-between md:items-center gap-4">
-                    <motion.h1
-                        className="text-3xl md:text-4xl font-bold tracking-tight"
-                        initial={{ opacity: 0, y: 6 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.25 }}
-                    >
-                        Merchant Dashboard
-                    </motion.h1>
-                    <AnimatedButton
-                        as="button"
-                        onClick={() => router.push("/merchant/addItem")}
-                        size="lg"
-                        rounded="lg"
-                        variant="white"
-                    >
-                        + Add New Item
-                    </AnimatedButton>
-                </div>
-
-                {/* Analytics Cards */}
-                <motion.div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}>
-                    {[
-                        { label: 'Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}` },
-                        { label: 'Orders', value: ordersLoading ? '…' : String(ordersCount) },
-                        { label: 'AOV', value: `₹${aov.toFixed(0).toLocaleString('en-IN')}` },
-                        { label: 'Items Sold', value: String(itemsSold) },
-                    ].map((c) => (
-                        <motion.div key={c.label} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
-                            <div className="text-sm text-[var(--muted-foreground)]">{c.label}</div>
-                            <div className="mt-1 text-2xl font-bold">{c.value}</div>
-                        </motion.div>
-                    ))}
-                </motion.div>
-
-                {/* Performance with range selector */}
-                <motion.div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.25 }}>
-                    <div className="flex items-center justify-between">
-                        <h2 className="text-lg font-semibold">Performance</h2>
-                        <div className="flex items-center gap-3">
-                            <div className="inline-flex items-center gap-1 border border-[var(--border)] rounded-md overflow-hidden">
-                                {['7d','30d','all'].map(r => (
-                                  <button key={r} onClick={()=> setRevenueRange(r)} className={`text-xs px-2 py-1 ${revenueRange===r ? 'bg-[var(--muted)]' : ''}`}>{r.toUpperCase()}</button>
-                                ))}
-                            </div>
-                            <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
-                                const allRows = Array.from(revenueByDate.entries())
-                                  .sort((a,b) => a[0].localeCompare(b[0]))
-                                  .map(([key, value]) => [new Date(key).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), value]);
-                                exportCSV('revenue_all_history.csv', ['Date','Revenue'], allRows);
-                            }}>Export CSV</button>
-                            <span className="text-xs text-[var(--muted-foreground)]">Revenue</span>
+        <>
+            {confirmationModal}
+            <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.25 }}
+                className="flex flex-col items-center w-full min-h-screen bg-[var(--background)] text-[var(--foreground)] p-4 md:p-8"
+            >
+                <div className="w-full max-w-7xl mx-auto">
+                    {banInfo.banned && (
+                        <div className="mb-4 p-4 rounded-lg border border-[var(--border)] bg-[color-mix(in_oklab,var(--destructive),white_90%)] text-[var(--destructive)]">
+                            <div className="font-semibold">Your shop is currently banned.</div>
+                            {banInfo.reason && <div className="text-sm mt-1">Reason: {String(banInfo.reason)}</div>}
+                            <a href="/about" className="inline-block mt-2 text-xs underline">Contact support</a>
                         </div>
-                    </div>
-                    <div className="mt-3">
-                        <CanvasBarChart labels={revenueSeries.labels} values={revenueSeries.values} height={160} />
-                    </div>
-                    {topItems.length > 0 && (
-                        <motion.div className="mt-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                            <div className="text-sm text-[var(--muted-foreground)] mb-2">Top items</div>
-                            <motion.div className="flex flex-wrap gap-2" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}>
-                                {topItems.map((it, idx) => (
-                                    <motion.span key={`${it.name}-${idx}`} variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } }} className="text-xs px-3 py-1 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
-                                        {it.name} · {it.qty}
-                                    </motion.span>
-                                ))}
-                            </motion.div>
-                        </motion.div>
                     )}
-                </motion.div>
+                    <div className="mt-12 flex flex-col md:flex-row justify-between md:items-center gap-4">
+                        <motion.h1
+                            className="text-3xl md:text-4xl font-bold tracking-tight"
+                            initial={{ opacity: 0, y: 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.25 }}
+                        >
+                            Merchant Dashboard
+                        </motion.h1>
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                            <div className="flex items-center gap-3 rounded-2xl border border-[var(--border)] bg-[var(--card)] px-4 py-3 shadow-sm">
+                                <button
+                                    type="button"
+                                    role="switch"
+                                    aria-checked={shopStatus.active}
+                                    aria-label="Toggle shop active status"
+                                    onClick={handleShopStatusToggle}
+                                    disabled={shopStatus.loading || shopStatus.updating}
+                                    className={`relative h-7 w-12 rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--ring)] disabled:cursor-not-allowed disabled:opacity-60 ${!shopStatus.loading && shopStatus.active ? "bg-emerald-600" : "bg-[var(--muted)]"
+                                        }`}
+                                >
+                                    <span
+                                        className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-all duration-200 ${!shopStatus.loading && shopStatus.active
+                                                ? "left-[22px]"
+                                                : "left-1"
+                                            }`}
+                                    />
+                                </button>
+                                <div className="min-w-[9.5rem]">
+                                    <div
+                                        className={`text-sm font-semibold ${shopStatus.loading
+                                                ? "text-[var(--muted-foreground)]"
+                                                : shopStatus.active
+                                                    ? "text-emerald-600"
+                                                    : "text-[var(--muted-foreground)]"
+                                            }`}
+                                    >
+                                        {shopStatus.loading
+                                            ? "Loading shop status..."
+                                            : shopStatus.active
+                                                ? "Shop is Live"
+                                                : "Shop is Inactive"}
+                                    </div>
+                                    {shopStatus.updating && (
+                                        <div className="text-xs text-[var(--muted-foreground)]">Updating...</div>
+                                    )}
+                                    {shopStatus.error && (
+                                        <div className="text-xs font-medium text-[var(--destructive)]">{shopStatus.error}</div>
+                                    )}
+                                </div>
+                            </div>
+                            <AnimatedButton
+                                as="button"
+                                onClick={() => router.push("/merchant/addItem")}
+                                size="lg"
+                                rounded="lg"
+                                variant="white"
+                            >
+                                + Add New Item
+                            </AnimatedButton>
+                        </div>
+                    </div>
 
-                {/* Bento Grid */}
-                <motion.div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 auto-rows-fr gap-4" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
-                    {/* Orders tile */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col justify-between lg:col-span-1">
+                    {/* Analytics Cards */}
+                    <motion.div className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-4" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.06 } } }}>
+                        {[
+                            { label: 'Revenue', value: `₹${totalRevenue.toLocaleString('en-IN')}` },
+                            { label: 'Orders', value: ordersLoading ? '…' : String(ordersCount) },
+                            { label: 'AOV', value: `₹${aov.toFixed(0).toLocaleString('en-IN')}` },
+                            { label: 'Items Sold', value: String(itemsSold) },
+                        ].map((c) => (
+                            <motion.div key={c.label} variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4">
+                                <div className="text-sm text-[var(--muted-foreground)]">{c.label}</div>
+                                <div className="mt-1 text-2xl font-bold">{c.value}</div>
+                            </motion.div>
+                        ))}
+                    </motion.div>
+
+                    {/* Performance with range selector */}
+                    <motion.div className="mt-6 rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4" initial={{ opacity: 0, y: 8 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true }} transition={{ duration: 0.25 }}>
                         <div className="flex items-center justify-between">
-                            <h3 className="text-base font-semibold">Orders</h3>
-                            {pendingCount > 0 && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[color-mix(in_oklab,var(--success),white_85%)] text-[var(--success)]">{pendingCount} pending</span>}
+                            <h2 className="text-lg font-semibold">Performance</h2>
+                            <div className="flex items-center gap-3">
+                                <div className="inline-flex items-center gap-1 border border-[var(--border)] rounded-md overflow-hidden">
+                                    {['7d', '30d', 'all'].map(r => (
+                                        <button key={r} onClick={() => setRevenueRange(r)} className={`text-xs px-2 py-1 ${revenueRange === r ? 'bg-[var(--muted)]' : ''}`}>{r.toUpperCase()}</button>
+                                    ))}
+                                </div>
+                                <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
+                                    const allRows = Array.from(revenueByDate.entries())
+                                        .sort((a, b) => a[0].localeCompare(b[0]))
+                                        .map(([key, value]) => [new Date(key).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }), value]);
+                                    exportCSV('revenue_all_history.csv', ['Date', 'Revenue'], allRows);
+                                }}>Export CSV</button>
+                                <span className="text-xs text-[var(--muted-foreground)]">Revenue</span>
+                            </div>
                         </div>
-                        <div className="mt-2 text-4xl font-extrabold tracking-tight">{pendingCount}</div>
                         <div className="mt-3">
-                            <AnimatedButton as="a" href="/merchant/allOrders" size="md" rounded="lg" variant="white">Review Orders</AnimatedButton>
+                            <CanvasBarChart labels={revenueSeries.labels} values={revenueSeries.values} height={160} />
                         </div>
+                        {topItems.length > 0 && (
+                            <motion.div className="mt-4" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                                <div className="text-sm text-[var(--muted-foreground)] mb-2">Top items</div>
+                                <motion.div className="flex flex-wrap gap-2" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.04 } } }}>
+                                    {topItems.map((it, idx) => (
+                                        <motion.span key={`${it.name}-${idx}`} variants={{ hidden: { opacity: 0, y: 6 }, show: { opacity: 1, y: 0 } }} className="text-xs px-3 py-1 rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">
+                                            {it.name} · {it.qty}
+                                        </motion.span>
+                                    ))}
+                                </motion.div>
+                            </motion.div>
+                        )}
                     </motion.div>
 
-                    {/* Best Performing Items */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Best Performing Items</h3>
-                            <div className="flex items-center gap-3">
-                                <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
-                                    const rows = topItems.map(it => [it.name, it.qty, Math.round(it.revenue)]);
-                                    exportCSV('top_items.csv', ['Item','Qty','Revenue'], rows);
-                                }}>Export CSV</button>
-                                <span className="text-xs text-[var(--muted-foreground)]">Top 5 by revenue</span>
+                    {/* Bento Grid */}
+                    <motion.div className="mt-6 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 auto-rows-fr gap-4" initial="hidden" animate="show" variants={{ hidden: {}, show: { transition: { staggerChildren: 0.05 } } }}>
+                        {/* Orders tile */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 flex flex-col justify-between lg:col-span-1">
+                            <div className="flex items-center justify-between">
+                                <h3 className="text-base font-semibold">Orders</h3>
+                                {pendingCount > 0 && <span className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded-full bg-[color-mix(in_oklab,var(--success),white_85%)] text-[var(--success)]">{pendingCount} pending</span>}
                             </div>
-                        </div>
-                        {topItems.length === 0 ? (
-                            <p className="text-sm text=[var(--muted-foreground)]">Not enough data yet.</p>
-                        ) : (
-                            <ul className="divide-y divide-[var(--border)]">
-                                {topItems.map((it, idx) => (
-                                    <motion.li key={idx} className="flex items-center justify-between py-2" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                                        <div className="flex items-center gap-3">
-                                            <span className="text-xs w-6 h-6 grid place-items-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">{idx+1}</span>
-                                            <span className="font-medium">{it.name}</span>
-                                        </div>
-                                        <div className="flex items-center gap-4 text-sm">
-                                            <span className="text-[var(--muted-foreground)]">Qty {it.qty}</span>
-                                            <span className="font-semibold">₹{Math.round(it.revenue).toLocaleString('en-IN')}</span>
-                                        </div>
-                                    </motion.li>
-                                ))}
-                            </ul>
-                        )}
-                    </motion.div>
-
-                    {/* Low Stock Warnings */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-1">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Low Stock</h3>
-                            <span className="text-xs text-[var(--muted-foreground)]">≤ {Number(lowThreshold) || 5} units</span>
-                        </div>
-                        {lowStockItems.length === 0 ? (
-                            <p className="text-sm text-[var(--muted-foreground)]">All good! No low-stock items.</p>
-                        ) : (
-                            <ul className="space-y-2">
-                                {lowStockItems.map((it) => (
-                                    <motion.li key={it.id} className="flex items-center justify-between text-sm" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                                        <span className="truncate max-w-[60%]">{it.name}</span>
-                                        <span className={`px-2 py-0.5 rounded-full border text-xs ${ (it.quantity||0) <= 2 ? 'bg-[color-mix(in_oklab,var(--destructive),white_85%)] text-[var(--destructive)]' : 'bg-[var(--muted)] text-[var(--muted-foreground)]'}`}>Qty {it.quantity}</span>
-                                    </motion.li>
-                                ))}
-                            </ul>
-                        )}
-                    </motion.div>
-
-                    {/* Out-of-stock Soon (prediction) */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-1">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Out-of-stock Soon</h3>
-                            <span className="text-xs text-[var(--muted-foreground)]">Predicted ≤ 7 days</span>
-                        </div>
-                        {oosSoon.length === 0 ? (
-                            <p className="text-sm text-[var(--muted-foreground)]">No items at risk.</p>
-                        ) : (
-                            <ul className="space-y-2">
-                                {oosSoon.map((it) => (
-                                    <motion.li key={it.id} className="flex items-center justify-between text-sm" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                                        <span className="truncate max-w-[60%]">{it.name}</span>
-                                        <span className="px-2 py-0.5 rounded-full border text-xs bg-[var(--muted)] text-[var(--muted-foreground)]">{it.daysLeft}d</span>
-                                    </motion.li>
-                                ))}
-                            </ul>
-                        )}
-                    </motion.div>
-
-                    {/* Payment Mix */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Payment Mix</h3>
-                            <div className="flex items-center gap-3">
-                                <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
-                                    const rows = paymentDistribution.entries.map(([k,v]) => [k, v, Math.round((v / paymentDistribution.total) * 100)]);
-                                    exportCSV('payment_mix.csv', ['Method','Count','Percent'], rows);
-                                }}>Export CSV</button>
-                                <span className="text-xs text-[var(--muted-foreground)]">Paid orders</span>
+                            <div className="mt-2 text-4xl font-extrabold tracking-tight">{pendingCount}</div>
+                            <div className="mt-3">
+                                <AnimatedButton as="a" href="/merchant/allOrders" size="md" rounded="lg" variant="white">Review Orders</AnimatedButton>
                             </div>
-                        </div>
-                        {paymentDistribution.total === 0 ? (
-                            <p className="text-sm text-[var(--muted-foreground)]">No completed payments yet.</p>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="flex w-full h-3 rounded-full overflow-hidden border border-[var(--border)]">
-                                    {paymentDistribution.entries.map(([k, v], i) => {
-                                        const pct = Math.round((v / paymentDistribution.total) * 100);
-                                        const hues = ["var(--primary)", "oklch(75% 0.12 240)", "oklch(70% 0.1 180)", "oklch(80% 0.1 60)"];
-                                        return <div key={k} style={{ width: `${pct}%`, background: hues[i % hues.length] }} />
-                                    })}
-                                </div>
-                                <div className="flex flex-wrap gap-3 text-xs">
-                                    {paymentDistribution.entries.map(([k, v], i) => {
-                                        const pct = Math.round((v / paymentDistribution.total) * 100);
-                                        return <span key={k} className="inline-flex items-center gap-2">
-                                            <span className="w-3 h-3 rounded-full" style={{ background: i % 4 === 0 ? 'var(--primary)' : i % 4 === 1 ? 'oklch(75% 0.12 240)' : i % 4 === 2 ? 'oklch(70% 0.1 180)' : 'oklch(80% 0.1 60)' }} />
-                                            {k.toUpperCase()} {pct}%
-                                        </span>
-                                    })}
+                        </motion.div>
+
+                        {/* Best Performing Items */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Best Performing Items</h3>
+                                <div className="flex items-center gap-3">
+                                    <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
+                                        const rows = topItems.map(it => [it.name, it.qty, Math.round(it.revenue)]);
+                                        exportCSV('top_items.csv', ['Item', 'Qty', 'Revenue'], rows);
+                                    }}>Export CSV</button>
+                                    <span className="text-xs text-[var(--muted-foreground)]">Top 5 by revenue</span>
                                 </div>
                             </div>
-                        )}
-                    </motion.div>
-
-                    {/* Order Status Mix */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Order Status</h3>
-                            <span className="text-xs text-[var(--muted-foreground)]">All orders</span>
-                        </div>
-                        {statusDistribution.total === 0 ? (
-                            <p className="text-sm text-[var(--muted-foreground)]">No orders yet.</p>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="flex w-full h-3 rounded-full overflow-hidden border border-[var(--border)]">
-                                    {statusDistribution.entries.map(([k, v], i) => {
-                                        const pct = Math.round((v / statusDistribution.total) * 100);
-                                        const hues = ["oklch(80% 0.1 280)", "oklch(70% 0.1 330)", "oklch(80% 0.1 120)", "oklch(80% 0.1 40)"];
-                                        return <div key={k} style={{ width: `${pct}%`, background: hues[i % hues.length] }} />
-                                    })}
-                                </div>
-                                <div className="flex flex-wrap gap-3 text-xs">
-                                    {statusDistribution.entries.map(([k, v], i) => {
-                                        const pct = Math.round((v / statusDistribution.total) * 100);
-                                        return <span key={k} className="inline-flex items-center gap-2">
-                                            <span className="w-3 h-3 rounded-full" style={{ background: i % 4 === 0 ? 'oklch(80% 0.1 280)' : i % 4 === 1 ? 'oklch(70% 0.1 330)' : i % 4 === 2 ? 'oklch(80% 0.1 120)' : 'oklch(80% 0.1 40)' }} />
-                                            {k.replace(/'/g,'').toUpperCase()} {pct}%
-                                        </span>
-                                    })}
-                                </div>
-                            </div>
-                        )}
-                    </motion.div>
-
-                    {/* Orders over time (count) */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Orders over time</h3>
-                            <span className="text-xs text-[var(--muted-foreground)]">Last 7 days</span>
-                        </div>
-                        <div className="mt-1">
-                            <CanvasBarChart labels={ordersCountSeries.map(d=>d.label)} values={ordersCountSeries.map(d=>d.value)} height={140} />
-                        </div>
-                    </motion.div>
-
-                    {/* Top categories */}
-                    <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
-                        <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-base font-semibold">Top categories</h3>
-                            <div className="flex items-center gap-3">
-                                <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
-                                    const rows = topCategories.arr.map(([cat, qty]) => [cat, qty, Math.round((qty / (topCategories.total || 1)) * 100)]);
-                                    exportCSV('top_categories.csv', ['Category','Qty','Percent'], rows);
-                                }}>Export CSV</button>
-                                <span className="text-xs text-[var(--muted-foreground)]">By items sold</span>
-                            </div>
-                        </div>
-                        {topCategories.arr.length === 0 ? (
-                            <p className="text-sm text-[var(--muted-foreground)]">No category data yet.</p>
-                        ) : (
-                            <div className="space-y-2">
-                                {topCategories.arr.map(([cat, qty], i) => {
-                                    const pct = Math.round((qty / topCategories.total) * 100);
-                                    const hues = ["var(--primary)", "oklch(75% 0.12 240)", "oklch(70% 0.1 180)", "oklch(80% 0.1 60)", "oklch(80% 0.1 280)", "oklch(70% 0.1 330)"];
-                                    return (
-                                        <motion.div key={cat} className="flex items-center gap-3" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
-                                            <span className="w-16 text-xs truncate">{cat}</span>
-                                            <div className="flex-1 h-2 rounded-full overflow-hidden border border-[var(--border)]">
-                                                <div className="h-full" style={{ width: `${pct}%`, background: hues[i % hues.length] }} />
+                            {topItems.length === 0 ? (
+                                <p className="text-sm text=[var(--muted-foreground)]">Not enough data yet.</p>
+                            ) : (
+                                <ul className="divide-y divide-[var(--border)]">
+                                    {topItems.map((it, idx) => (
+                                        <motion.li key={idx} className="flex items-center justify-between py-2" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xs w-6 h-6 grid place-items-center rounded-full bg-[var(--muted)] text-[var(--muted-foreground)]">{idx + 1}</span>
+                                                <span className="font-medium">{it.name}</span>
                                             </div>
-                                            <span className="w-10 text-right text-xs">{pct}%</span>
-                                        </motion.div>
-                                    );
-                                })}
-                            </div>
-                        )}
-                    </motion.div>
-                </motion.div>
+                                            <div className="flex items-center gap-4 text-sm">
+                                                <span className="text-[var(--muted-foreground)]">Qty {it.qty}</span>
+                                                <span className="font-semibold">₹{Math.round(it.revenue).toLocaleString('en-IN')}</span>
+                                            </div>
+                                        </motion.li>
+                                    ))}
+                                </ul>
+                            )}
+                        </motion.div>
 
-                {/* End Bento Grid */}
-            </div>
-        </motion.div>
+                        {/* Low Stock Warnings */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-1">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Low Stock</h3>
+                                <span className="text-xs text-[var(--muted-foreground)]">≤ {Number(lowThreshold) || 5} units</span>
+                            </div>
+                            {lowStockItems.length === 0 ? (
+                                <p className="text-sm text-[var(--muted-foreground)]">All good! No low-stock items.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {lowStockItems.map((it) => (
+                                        <motion.li key={it.id} className="flex items-center justify-between text-sm" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                                            <span className="truncate max-w-[60%]">{it.name}</span>
+                                            <span className={`px-2 py-0.5 rounded-full border text-xs ${(it.quantity || 0) <= 2 ? 'bg-[color-mix(in_oklab,var(--destructive),white_85%)] text-[var(--destructive)]' : 'bg-[var(--muted)] text-[var(--muted-foreground)]'}`}>Qty {it.quantity}</span>
+                                        </motion.li>
+                                    ))}
+                                </ul>
+                            )}
+                        </motion.div>
+
+                        {/* Out-of-stock Soon (prediction) */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-1">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Out-of-stock Soon</h3>
+                                <span className="text-xs text-[var(--muted-foreground)]">Predicted ≤ 7 days</span>
+                            </div>
+                            {oosSoon.length === 0 ? (
+                                <p className="text-sm text-[var(--muted-foreground)]">No items at risk.</p>
+                            ) : (
+                                <ul className="space-y-2">
+                                    {oosSoon.map((it) => (
+                                        <motion.li key={it.id} className="flex items-center justify-between text-sm" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                                            <span className="truncate max-w-[60%]">{it.name}</span>
+                                            <span className="px-2 py-0.5 rounded-full border text-xs bg-[var(--muted)] text-[var(--muted-foreground)]">{it.daysLeft}d</span>
+                                        </motion.li>
+                                    ))}
+                                </ul>
+                            )}
+                        </motion.div>
+
+                        {/* Payment Mix */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Payment Mix</h3>
+                                <div className="flex items-center gap-3">
+                                    <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
+                                        const rows = paymentDistribution.entries.map(([k, v]) => [k, v, Math.round((v / paymentDistribution.total) * 100)]);
+                                        exportCSV('payment_mix.csv', ['Method', 'Count', 'Percent'], rows);
+                                    }}>Export CSV</button>
+                                    <span className="text-xs text-[var(--muted-foreground)]">Paid orders</span>
+                                </div>
+                            </div>
+                            {paymentDistribution.total === 0 ? (
+                                <p className="text-sm text-[var(--muted-foreground)]">No completed payments yet.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="flex w-full h-3 rounded-full overflow-hidden border border-[var(--border)]">
+                                        {paymentDistribution.entries.map(([k, v], i) => {
+                                            const pct = Math.round((v / paymentDistribution.total) * 100);
+                                            const hues = ["var(--primary)", "oklch(75% 0.12 240)", "oklch(70% 0.1 180)", "oklch(80% 0.1 60)"];
+                                            return <div key={k} style={{ width: `${pct}%`, background: hues[i % hues.length] }} />
+                                        })}
+                                    </div>
+                                    <div className="flex flex-wrap gap-3 text-xs">
+                                        {paymentDistribution.entries.map(([k, v], i) => {
+                                            const pct = Math.round((v / paymentDistribution.total) * 100);
+                                            return <span key={k} className="inline-flex items-center gap-2">
+                                                <span className="w-3 h-3 rounded-full" style={{ background: i % 4 === 0 ? 'var(--primary)' : i % 4 === 1 ? 'oklch(75% 0.12 240)' : i % 4 === 2 ? 'oklch(70% 0.1 180)' : 'oklch(80% 0.1 60)' }} />
+                                                {k.toUpperCase()} {pct}%
+                                            </span>
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+
+                        {/* Order Status Mix */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Order Status</h3>
+                                <span className="text-xs text-[var(--muted-foreground)]">All orders</span>
+                            </div>
+                            {statusDistribution.total === 0 ? (
+                                <p className="text-sm text-[var(--muted-foreground)]">No orders yet.</p>
+                            ) : (
+                                <div className="space-y-3">
+                                    <div className="flex w-full h-3 rounded-full overflow-hidden border border-[var(--border)]">
+                                        {statusDistribution.entries.map(([k, v], i) => {
+                                            const pct = Math.round((v / statusDistribution.total) * 100);
+                                            const hues = ["oklch(80% 0.1 280)", "oklch(70% 0.1 330)", "oklch(80% 0.1 120)", "oklch(80% 0.1 40)"];
+                                            return <div key={k} style={{ width: `${pct}%`, background: hues[i % hues.length] }} />
+                                        })}
+                                    </div>
+                                    <div className="flex flex-wrap gap-3 text-xs">
+                                        {statusDistribution.entries.map(([k, v], i) => {
+                                            const pct = Math.round((v / statusDistribution.total) * 100);
+                                            return <span key={k} className="inline-flex items-center gap-2">
+                                                <span className="w-3 h-3 rounded-full" style={{ background: i % 4 === 0 ? 'oklch(80% 0.1 280)' : i % 4 === 1 ? 'oklch(70% 0.1 330)' : i % 4 === 2 ? 'oklch(80% 0.1 120)' : 'oklch(80% 0.1 40)' }} />
+                                                {k.replace(/'/g, '').toUpperCase()} {pct}%
+                                            </span>
+                                        })}
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+
+                        {/* Orders over time (count) */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Orders over time</h3>
+                                <span className="text-xs text-[var(--muted-foreground)]">Last 7 days</span>
+                            </div>
+                            <div className="mt-1">
+                                <CanvasBarChart labels={ordersCountSeries.map(d => d.label)} values={ordersCountSeries.map(d => d.value)} height={140} />
+                            </div>
+                        </motion.div>
+
+                        {/* Top categories */}
+                        <motion.div variants={{ hidden: { opacity: 0, y: 10 }, show: { opacity: 1, y: 0 } }} className="rounded-2xl border border-[var(--border)] bg-[var(--card)] p-4 lg:col-span-2">
+                            <div className="flex items-center justify-between mb-2">
+                                <h3 className="text-base font-semibold">Top categories</h3>
+                                <div className="flex items-center gap-3">
+                                    <button className="text-xs px-2 py-1 rounded border border-[var(--border)] hover:bg-[var(--muted)]" onClick={() => {
+                                        const rows = topCategories.arr.map(([cat, qty]) => [cat, qty, Math.round((qty / (topCategories.total || 1)) * 100)]);
+                                        exportCSV('top_categories.csv', ['Category', 'Qty', 'Percent'], rows);
+                                    }}>Export CSV</button>
+                                    <span className="text-xs text-[var(--muted-foreground)]">By items sold</span>
+                                </div>
+                            </div>
+                            {topCategories.arr.length === 0 ? (
+                                <p className="text-sm text-[var(--muted-foreground)]">No category data yet.</p>
+                            ) : (
+                                <div className="space-y-2">
+                                    {topCategories.arr.map(([cat, qty], i) => {
+                                        const pct = Math.round((qty / topCategories.total) * 100);
+                                        const hues = ["var(--primary)", "oklch(75% 0.12 240)", "oklch(70% 0.1 180)", "oklch(80% 0.1 60)", "oklch(80% 0.1 280)", "oklch(70% 0.1 330)"];
+                                        return (
+                                            <motion.div key={cat} className="flex items-center gap-3" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}>
+                                                <span className="w-16 text-xs truncate">{cat}</span>
+                                                <div className="flex-1 h-2 rounded-full overflow-hidden border border-[var(--border)]">
+                                                    <div className="h-full" style={{ width: `${pct}%`, background: hues[i % hues.length] }} />
+                                                </div>
+                                                <span className="w-10 text-right text-xs">{pct}%</span>
+                                            </motion.div>
+                                        );
+                                    })}
+                                </div>
+                            )}
+                        </motion.div>
+                    </motion.div>
+
+                    {/* End Bento Grid */}
+                </div>
+            </motion.div>
+        </>
     );
 }
 
