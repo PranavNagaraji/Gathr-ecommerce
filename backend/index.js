@@ -2,12 +2,12 @@ import 'dotenv/config'; // Reload: sender email updated to gmail
 import express from "express";
 import http from "http";
 import { Server as SocketIOServer } from "socket.io";
-
+import { createIndex } from './redis/redisIndex.js';
+import { seedFromSupabase } from './redis/redisSeed.js';
 import { Clerk } from "@clerk/clerk-sdk-node";
 import cors from "cors";
 import { clerkMiddleware } from "@clerk/express";
 import supabase from "./db.js";
-import pg from "pg";
 import merchantRoutes from "./routes/merchantRoute.js";
 import customerRoutes from "./routes/customerRoute.js";
 import orderRoutes from "./routes/orderRoute.js";
@@ -72,8 +72,8 @@ app.post("/razorpay/webhook", express.json(), async (req, res, next) => {
 });
 
 // Now apply JSON parser for all other routes
-app.use(express.json({ limit: "50mb"}));
-app.use(express.urlencoded({ extended: true , limit: '50mb'}));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Public routes (no Clerk auth)
 app.use("/api/otp", otpRouter);
@@ -137,7 +137,7 @@ app.post("/set-role", async (req, res) => {
 
     return res.status(200).json({
       message: "Role set and user data synced to Supabase successfully.",
-      user: data, 
+      user: data,
     });
   } catch (error) {
     console.error("Error in /set-role endpoint:", error);
@@ -146,73 +146,8 @@ app.post("/set-role", async (req, res) => {
   }
 });
 
-async function ensureWishlistSchema() {
-  const { SUPABASE_DB_URL } = process.env;
-  if (!SUPABASE_DB_URL) {
-    console.warn("[ensureWishlistSchema] SUPABASE_DB_URL not set; skipping migration");
-    return;
-  }
-  const pool = new pg.Pool({ connectionString: SUPABASE_DB_URL, max: 1 });
-  const sql = `
-  create table if not exists public.wishlist (
-    id bigserial primary key,
-    user_clerk_id text not null,
-    item_id bigint not null references public."Items"(id) on delete cascade,
-    shop_id bigint not null references public."Shops"(id) on delete cascade,
-    created_at timestamptz default now(),
-    unique (user_clerk_id, item_id)
-  );
-  alter table public.wishlist disable row level security;`;
-  const client = await pool.connect();
-  try {
-    await client.query('begin');
-    await client.query(sql);
-    await client.query('commit');
-    // console.log('[ensureWishlistSchema] wishlist schema ensured');
-  } catch (e) {
-    await client.query('rollback');
-    console.error('[ensureWishlistSchema] migration failed:', e.message);
-  } finally {
-    client.release();
-    await pool.end();
-  }
-}
-
-async function ensureComplaintsSchema() {
-  const { SUPABASE_DB_URL } = process.env;
-  if (!SUPABASE_DB_URL) {
-    console.warn("[ensureComplaintsSchema] SUPABASE_DB_URL not set; skipping migration");
-    return;
-  }
-  const pool = new pg.Pool({ connectionString: SUPABASE_DB_URL, max: 1 });
-  const sql = `
-  create table if not exists public."Complaints" (
-    id bigserial primary key,
-    user_clerk_id text,
-    name text,
-    email text,
-    message text not null,
-    status text default 'open',
-    created_at timestamptz default now()
-  );
-  alter table public."Complaints" disable row level security;`;
-  const client = await pool.connect();
-  try {
-    await client.query('begin');
-    await client.query(sql);
-    await client.query('commit');
-    console.log('[ensureComplaintsSchema] Complaints schema ensured');
-  } catch (e) {
-    await client.query('rollback');
-    console.error('[ensureComplaintsSchema] migration failed:', e.message);
-  } finally {
-    client.release();
-    await pool.end();
-  }
-}
-
-ensureWishlistSchema();
-ensureComplaintsSchema();
+await createIndex();
+await seedFromSupabase();
 
 const port = process.env.PORT || 5000;
 server.listen(port, () => console.log("Backend + Socket.IO running"));

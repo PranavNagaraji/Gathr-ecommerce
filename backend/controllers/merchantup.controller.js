@@ -3,6 +3,7 @@ import supabase from "../db.js";
 import cloudinary from "../cloudinary.js";
 import { Clerk } from "@clerk/clerk-sdk-node";
 import dotenv from "dotenv";
+import redisClient from "../redis/redis.js";
 
 dotenv.config();
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
@@ -37,7 +38,7 @@ export const updateShop = async (req, res) => {
                 category
             })
             .eq('owner_id', user.id)
-            .select('image') 
+            .select('image')
             .single();
 
         if (updateError) {
@@ -67,7 +68,7 @@ export const updateShop = async (req, res) => {
                         .from("Shops")
                         .update({ image: imageData })
                         .eq('owner_id', user.id);
-                        
+
                     console.log(`Successfully updated image for shop owned by user ${user.id}`);
                 } catch (error) {
                     console.error("Error in background image processing for editShop:", error);
@@ -86,7 +87,7 @@ export const updateShop = async (req, res) => {
 export const updateItem = async (req, res) => {
     try {
         const { name, description, quantity, price, images, category, owner_id, id } = req.body;
-        
+
         const { data: user, error: userError } = await supabase
             .from('Users')
             .select('id, role')
@@ -123,12 +124,31 @@ export const updateItem = async (req, res) => {
             .eq('shop_id', shop_id.id)
             .select('images')
             .single();
-        
+
         if (updateError) {
             throw updateError;
         }
         console.log("hello")
         res.status(200).json({ message: "Item updated successfully. Image processing in background." });
+
+        // --Redis Sync for non-image fields
+        if (!images || images.length === 0) {
+            const { data: item } = await supabase.from("Items").select("*").eq("id", id).single();
+            if (item) {
+                await redisClient.json.set(`product:${item.id}`, "$", {
+                    id: item.id,
+                    name: item.name ?? "",
+                    description: item.description ?? "",
+                    price: item.price ?? 0,
+                    quantity: item.quantity ?? 0,
+                    sold_qt: item.sold_qt ?? 0,
+                    rating: item.rating ?? null,
+                    category: item.category ?? [],
+                    shop_id: item.shop_id,
+                    images: item.images ?? [],
+                });
+            }
+        }
 
         //Handle image updates in the background if new images are provided
         if (images && images.length > 0) {
@@ -155,12 +175,28 @@ export const updateItem = async (req, res) => {
                         .eq('id', id)
                         .eq('shop_id', shop_id.id);
 
-                    
+                    const { data: item } = await supabase.from("Items").select("*").eq("id", id).single();
+                    if (item) {
+                        await redisClient.json.set(`product:${item.id}`, "$", {
+                            id: item.id,
+                            name: item.name ?? "",
+                            description: item.description ?? "",
+                            price: item.price ?? 0,
+                            quantity: item.quantity ?? 0,
+                            sold_qt: item.sold_qt ?? 0,
+                            rating: item.rating ?? null,
+                            category: item.category ?? [],
+                            shop_id: item.shop_id,
+                            images: item.images ?? [],
+                        });
+                    }
+
                     console.log(`Successfully updated images for item ${id}`);
                 } catch (error) {
                     console.error(`Error in background image processing for updateItem (item ID: ${id}):`, error);
                 }
             })();
+
         }
 
     } catch (error) {
@@ -169,46 +205,46 @@ export const updateItem = async (req, res) => {
     }
 };
 
-export const deleteShop = async (req,res) =>{
-    try{
+export const deleteShop = async (req, res) => {
+    try {
         const { owner_id } = req.body;
         const { data: user, error: userError } = await supabase
             .from('Users')
             .select('id, role')
             .eq('clerk_id', owner_id)
             .single();
-        if(userError || !user){
+        if (userError || !user) {
             return res.status(404).json({ message: "User not found" });
         }
-        if(user.role !== 'merchant')
+        if (user.role !== 'merchant')
             return res.status(403).json({ message: "Unauthorized: Only merchants can delete shops" });
-        const image = await supabase.from("Shops").select("image").eq("owner_id",user.id).single();
-        if(image.data.image && image.data.image.public_id){
+        const image = await supabase.from("Shops").select("image").eq("owner_id", user.id).single();
+        if (image.data.image && image.data.image.public_id) {
             await cloudinary.uploader.destroy(image.data.image.public_id);
         }
-        await supabase.from("Shops").delete().eq("owner_id",user.id);   
+        await supabase.from("Shops").delete().eq("owner_id", user.id);
         return res.status(200).json({ message: "Shop deleted successfully" });
 
-    }catch(error){
+    } catch (error) {
         console.error("Error deleting shop:", error);
         return res.status(500).json({ message: "Error deleting shop", error: error.message });
     }
 }
 
-export const deleteitem = async(req,res)=>{
+export const deleteitem = async (req, res) => {
     try {
-        const { item_id,clerk_id } = req.body;
-        const owner = await supabase.from("Users").select("id").eq("clerk_id",clerk_id).single();
-        let shop_id = await supabase.from("Shops").select("id").eq("owner_id",owner.data.id).single();
+        const { item_id, clerk_id } = req.body;
+        const owner = await supabase.from("Users").select("id").eq("clerk_id", clerk_id).single();
+        let shop_id = await supabase.from("Shops").select("id").eq("owner_id", owner.data.id).single();
         shop_id = shop_id.data.id
-        
+
         const { data: item, error: itemError } = await supabase
             .from("Items")
             .select("images")
             .eq("id", item_id)
-            .eq("shop_id",shop_id)
+            .eq("shop_id", shop_id)
             .single();
-        
+
         if (itemError || !item) {
             return res.status(404).json({ message: "Item not found" });
         }
@@ -218,6 +254,7 @@ export const deleteitem = async(req,res)=>{
             await cloudinary.api.delete_resources(publicIdsToDelete);
         }
         await supabase.from("Items").delete().eq("id", item_id);
+        await redisClient.del(`product:${item_id}`);
         return res.status(200).json({ message: "Item deleted successfully" });
     } catch (error) {
         console.error("Error deleting item:", error);

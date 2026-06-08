@@ -1,5 +1,6 @@
 import supabase from '../db.js';
 import { Clerk } from "@clerk/clerk-sdk-node";
+import redisClient from "../redis/redis.js";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -106,11 +107,11 @@ export const searchLocalItems = async (req, res) => {
       return res.status(400).json({ message: 'lat and long are required' });
     }
 
+    // 1. Get nearby shop IDs (still from Supabase — geo data not in Redis)
     const distanceKm = 11;
     const latRad = lat * (Math.PI / 180);
     const deltaLat = distanceKm / 111;
     const deltaLong = distanceKm / (111 * Math.cos(latRad));
-
     const minLat = lat - deltaLat;
     const maxLat = lat + deltaLat;
     const minLong = long - deltaLong;
@@ -119,10 +120,9 @@ export const searchLocalItems = async (req, res) => {
     const { data: allShops, error: shopError } = await supabase
       .from('Shops')
       .select('id, owner_id, Location');
-
     if (shopError) return res.status(500).json({ message: 'Error fetching shops', error: shopError });
 
-    const shops = (allShops || []).filter(s => {
+    let candidateShops = (allShops || []).filter(s => {
       if (!s.Location) return false;
       const sLat = parseFloat(s.Location.latitude ?? s.Location.lat);
       const sLong = parseFloat(s.Location.longitude ?? s.Location.long ?? s.Location.lng);
@@ -130,91 +130,57 @@ export const searchLocalItems = async (req, res) => {
       return sLat >= minLat && sLat <= maxLat && sLong >= minLong && sLong <= maxLong;
     });
 
-    let candidateShops = shops || [];
+    // 2. Filter out banned merchants
     try {
       const ownerIds = Array.from(new Set(candidateShops.map(s => s.owner_id).filter(Boolean)));
-      let owners = [];
       if (ownerIds.length) {
-        const { data: users, error: usersErr } = await supabase
-          .from('Users')
-          .select('id, clerk_id')
-          .in('id', ownerIds);
-        if (!usersErr && users) owners = users;
+        const { data: users } = await supabase.from('Users').select('id, clerk_id').in('id', ownerIds);
+        if (users) {
+          const ownerIdToClerk = new Map(users.map(u => [u.id, u.clerk_id]));
+          const bannedClerks = new Set();
+          for (const c of Array.from(new Set(users.map(u => u.clerk_id).filter(Boolean)))) {
+            try {
+              const cu = await clerk.users.getUser(c);
+              if (cu?.publicMetadata?.shop_banned) bannedClerks.add(c);
+            } catch { }
+          }
+          candidateShops = candidateShops.filter(s => !bannedClerks.has(ownerIdToClerk.get(s.owner_id)));
+        }
       }
-      const ownerIdToClerk = new Map(owners.map(u => [u.id, u.clerk_id]));
-      const bannedClerks = new Set();
-      for (const c of Array.from(new Set(owners.map(u => u.clerk_id).filter(Boolean)))) {
-        try {
-          const cu = await clerk.users.getUser(c);
-          if (cu?.publicMetadata?.shop_banned) bannedClerks.add(c);
-        } catch { }
-      }
-      candidateShops = candidateShops.filter(s => !bannedClerks.has(ownerIdToClerk.get(s.owner_id)));
     } catch { }
 
-    const shopIds = (candidateShops || []).map((s) => s.id).filter(Boolean);
+    const shopIds = candidateShops.map(s => s.id).filter(Boolean);
     if (!shopIds.length) {
-      return res.status(200).json({ items: [], page: 1, limit: Number(limit) || 12, total: 0, totalPages: 1, hasPrev: false, hasNext: false });
+      return res.status(200).json({ items: [], page: 1, limit: Number(limit), total: 0, totalPages: 1, hasPrev: false, hasNext: false });
     }
 
+    // 3. Build RediSearch query
     const pageNum = Math.max(parseInt(String(page), 10) || 1, 1);
     const limitNum = Math.min(Math.max(parseInt(String(limit), 10) || 12, 1), 100);
-    const from = (pageNum - 1) * limitNum;
-    const to = from + limitNum - 1;
-
-    let query = supabase
-      .from('Items')
-      .select('*', { count: 'exact' })
-      .in('shop_id', shopIds);
+    const offset = (pageNum - 1) * limitNum;
 
     const term = String(q || '').trim();
-    if (term) {
-      // Fetch a capped list then filter in JS to also match category text (partial, case-insensitive)
-      let base = supabase
-        .from('Items')
-        .select('*')
-        .in('shop_id', shopIds);
 
-      const { data: allItems, error: qErr } = await base.limit(1000);
-      if (qErr) return res.status(500).json({ message: 'Error fetching items', error: qErr });
+    // shop_id filter: @shop_id:[3 3] | @shop_id:[4 4] | ...
+    const shopFilter = shopIds
+      .map(id => `@shop_id:[${id} ${id}]`)
+      .join(' | ');
 
-      const needle = term.toLowerCase();
-      let list = (allItems || []).filter((it) => {
-        const name = String(it.name || '').toLowerCase();
-        const desc = String(it.description || '').toLowerCase();
-        const cats = Array.isArray(it.category) ? it.category.map((c) => String(c || '').toLowerCase()) : [];
-        return name.includes(needle) || desc.includes(needle) || cats.some((c) => c.includes(needle));
-      });
+    const searchQuery = term
+      ? `(${term}*) (${shopFilter})`
+      : `(${shopFilter})`;
 
-      // Sort to keep parity with default path
-      list.sort((a, b) => (Number(b.rating ?? 0) - Number(a.rating ?? 0)) || (new Date(b.created_at || 0) - new Date(a.created_at || 0)));
+    const results = await redisClient.ft.search('idx:products', searchQuery, {
+      LIMIT: { from: offset, size: limitNum },
+      SORTBY: { BY: 'sold_qt', DIRECTION: 'DESC' },
+    });
 
-      const total = list.length;
-      const totalPages = Math.max(Math.ceil(total / limitNum), 1);
-      const sliced = list.slice(from, from + limitNum);
-
-      return res.status(200).json({
-        items: sliced,
-        page: pageNum,
-        limit: limitNum,
-        total,
-        totalPages,
-        hasPrev: pageNum > 1,
-        hasNext: pageNum < totalPages,
-      });
-    }
-
-    // When no search term, use DB pagination and ordering
-    query = query.order('rating', { ascending: false }).order('created_at', { ascending: false });
-
-    const { data: items, error, count } = await query.range(from, to);
-    if (error) return res.status(500).json({ message: 'Error fetching items', error });
-
-    const total = count || 0;
+    const items = results.documents.map(doc => doc.value);
+    const total = results.total;
     const totalPages = Math.max(Math.ceil(total / limitNum), 1);
 
     return res.status(200).json({
-      items: items || [],
+      items,
       page: pageNum,
       limit: limitNum,
       total,
@@ -222,10 +188,12 @@ export const searchLocalItems = async (req, res) => {
       hasPrev: pageNum > 1,
       hasNext: pageNum < totalPages,
     });
+
   } catch (e) {
-    return res.status(500).json({ message: 'Error searching items', error: e });
+    console.error('searchLocalItems error:', e);
+    return res.status(500).json({ message: 'Error searching items', error: e.message });
   }
-}
+};
 
 export const getShopItems = async (req, res) => {
   try {

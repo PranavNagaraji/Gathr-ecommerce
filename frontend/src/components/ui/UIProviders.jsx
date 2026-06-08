@@ -5,6 +5,7 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import RouteTransitionOverlay from "@/components/loaders/RouteTransitionOverlay";
 import PageAnimator from "@/components/motion/PageAnimator";
 import "@/lib/i18n";
+import "@/lib/axios-bootstrap";
 
 export default function UIProviders({ children }) {
   return (
