@@ -1,5 +1,3 @@
-// Written entirely by Ankit Kumar
-// Payment Success Page
 'use client'
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
