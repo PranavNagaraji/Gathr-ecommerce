@@ -11,7 +11,7 @@
 
 ## 🚀 Project Overview
 
-Gathr is a full-stack, production-grade web application that enables local businesses to showcase their products and services to nearby customers. It features real-time order tracking, AI-powered product listing tools, geolocation-based discovery, role-based multi-actor authentication, and an end-to-end payment pipeline using Razorpay.
+Gathr is a full-stack, production-grade web application that enables local businesses to showcase their products and services to nearby customers. It features real-time order tracking, AI-powered product listing tools, geolocation-based discovery, role-based multi-actor authentication, high-performance product caching/searching and in-order chat persistence powered by **Redis**, and an end-to-end payment pipeline using Razorpay.
 
 ---
 
@@ -41,7 +41,8 @@ Gathr is a full-stack, production-grade web application that enables local busin
 | Framework | Express.js v5.1 (ES Modules) |
 | Authentication | Clerk SDK for Node.js + custom `requireAuth` middleware |
 | Database | Supabase (PostgreSQL) via `@supabase/supabase-js` |
-| Real-time | Socket.IO server (order rooms, carrier location updates, in-order chat) |
+| Cache & Search | Redis (RedisJSON & RediSearch v6) |
+| Real-time | Socket.IO server (order rooms, location updates) + Redis Lists (chat persistence) |
 | Image Storage | Cloudinary v2 |
 | File Uploads | Multer v2 |
 | Payments | Razorpay (order creation + webhook verification) |
@@ -118,12 +119,16 @@ Gathr/
 │   │   ├── adminRoute.js
 │   │   ├── adminPublicRoute.js     # Admin search (email-gated, no Clerk auth)
 │   │   └── otpRoute.js
+│   ├── redis/
+│   │   ├── redis.js                # Redis client connection and error handling
+│   │   ├── redisIndex.js           # RediSearch schema setup for idx:products
+│   │   └── redisSeed.js            # Seeding/syncing product data from Supabase to Redis
 │   ├── utils/
 │   │   ├── check.js                # Clerk JWT verification middleware
 │   │   └── mailer.js               # Unified email sender (SMTP → Mailjet fallback)
 │   ├── cloudinary.js               # Cloudinary SDK config
 │   ├── db.js                       # Supabase client singleton
-│   ├── index.js                    # Express app + Socket.IO server entry
+│   ├── index.js                    # Express app + Socket.IO server entry & Socket.IO Redis chat store
 │   └── razorpayIntegration.js      # Razorpay order + webhook handler
 ├── README.md
 └── .gitignore
@@ -141,18 +146,18 @@ Gathr/
 
 ### 🛒 Customer Experience
 - **Geolocation-based shop discovery**: finds shops within configurable radius
-- **Product browsing** with category filters and real-time search
+- **Fuzzy full-text item search** and category browsing powered by **RediSearch** and sorted by popularity/sales
 - **Shopping Cart**: optimistic UI, auto-save on `+`/`−`, animated item removal, instant navbar badge via `cart:changed` event
 - **Wishlist** with instant badge updates via `wishlist:changed` event
 - **Checkout** with Razorpay payment integration (UPI, cards, netbanking)
 - **Live order tracking** with real-time carrier GPS via Socket.IO
-- **In-order chat** between customer, merchant, and carrier
+- **In-order chat** between customer, merchant, and carrier (restored from Redis cache)
 - **AI product descriptions**: Gemini-powered "describe this item" feature
 - **Personalised recommendations** based on purchase history
 
 ### 🏪 Merchant Dashboard
 - **Shop creation and management** with Cloudinary image uploads
-- **Inventory management**: add, edit, delete products
+- **Inventory management**: add, edit, delete products (automatically synced to RedisJSON cache)
 - **AI-assisted product listing** (see Innovations section below)
 - **Barcode / UPC scan-to-list** (see Innovations section below)
 - **Order management**: accept/reject/update order status
@@ -169,9 +174,9 @@ Gathr/
 - **Complaint resolution queue**
 - **Transactional email dispatch** via SMTP/Mailjet
 
-### 💬 Real-time Features (Socket.IO)
+### 💬 Real-time Features (Socket.IO & Redis)
 - Carrier GPS location broadcast to order-specific rooms
-- In-order live chat (no message persistence by design)
+- **In-order live chat persistence**: Chat history is persisted in **Redis Lists** (`chat:{orderId}`), maintaining the last 200 messages with a 7-day expiration (TTL).
 - Cart badge and wishlist badge instant updates via custom browser events
 
 ---
@@ -262,7 +267,8 @@ Gathr supports four languages out of the box: **English**, **Telugu (తెల�
 ### Prerequisites
 - Node.js v18 or higher
 - npm (v9+) or yarn
-- Accounts with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google Cloud](https://cloud.google.com) (Maps + Gemini APIs)
+- Accounts/Instances with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google Cloud](https://cloud.google.com) (Maps + Gemini APIs)
+- A running **Redis** instance (e.g., Redis Cloud or local Redis Stack)
 - A Gmail account (or any SMTP provider) for transactional email. Optionally, a [Mailjet](https://mailjet.com) account as a fallback.
 
 ---
@@ -326,6 +332,9 @@ GEMINI_API_KEY=YOUR_GOOGLE_GEMINI_API_KEY
 RAZORPAY_KEY_ID=rzp_test_YOUR_RAZORPAY_KEY_ID
 RAZORPAY_KEY_SECRET=YOUR_RAZORPAY_KEY_SECRET
 
+# Redis connection string (used for caching, search, and chat history persistence)
+REDIS_URL=redis://default:YOUR_REDIS_PASSWORD@YOUR_REDIS_HOST:PORT
+
 # Email — Primary: SMTP (Gmail recommended)
 # Enable "App Passwords" in your Google account for Gmail SMTP
 SMTP_HOST=smtp.gmail.com
@@ -346,7 +355,10 @@ DELIVERY_BASE_FEE=30
 DELIVERY_PER_KM_FEE=10
 ```
 
-> **Email Priority**: The backend tries SMTP first. If SMTP is not configured or fails, it automatically falls back to Mailjet. You only need one of the two configured.
+> **Email Priority & Cloud Hosting (Render) Optimization**:
+> - **Localhost**: The backend attempts to send via SMTP first. If SMTP fails (configured with a 5-second timeout safeguard) or is not configured, it falls back to Mailjet.
+> - **Render / Deployed Environment**: Since cloud platforms like Render block outbound SMTP ports (`25`, `465`, `587`) on free tiers, the backend automatically detects the Render environment (`RENDER=true`) and **skips SMTP entirely**, executing the Mailjet fallback instantly if `MJ_APIKEY_PUBLIC`, `MJ_APIKEY_PRIVATE`, and `MJ_SENDER_EMAIL` are configured. This prevents 60-second connection timeout delays.
+> - **Dark Mode Safety**: Transactional email templates are explicitly styled with dark text colors (`#111111`) to prevent OTP visibility issues in dark-mode email clients.
 
 > **Security Note**: Never commit your `.env` files to version control. Both `frontend/.env` and `backend/.env` are listed in `.gitignore`.
 
