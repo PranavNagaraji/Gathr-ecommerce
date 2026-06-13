@@ -1,7 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import axios from 'axios';
-import { useAuth } from '@clerk/nextjs';
+import { useAuth, useUser } from '@clerk/nextjs';
 import { useJsApiLoader } from '@react-google-maps/api';
 import 'leaflet/dist/leaflet.css';
 
@@ -22,9 +23,16 @@ export default function DeliveryRouteMap({
     googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
   });
   const { getToken } = useAuth();
+  const { user } = useUser();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
   const [directions, setDirections] = useState(null);
-  const [currentStep, setCurrentStep] = useState('toShop');
+  const [currentStep, setCurrentStep] = useState(selectedOrder?.status === 'picked_up' ? 'toCustomer' : 'toShop');
+  
+  useEffect(() => {
+    if (selectedOrder?.status === 'picked_up') {
+      setCurrentStep('toCustomer');
+    }
+  }, [selectedOrder?.status]);
   const [mapCenter, setMapCenter] = useState(carrierLocation);
   const [showOtpModal, setShowOtpModal] = useState(false);
   const [otp, setOtp] = useState('');
@@ -32,6 +40,9 @@ export default function DeliveryRouteMap({
   const [resendCountdown, setResendCountdown] = useState(30);
   // Live carrier location after pickup
   const [liveCarrier, setLiveCarrier] = useState(null);
+
+  const [alertConfig, setAlertConfig] = useState(null);
+  const showAlert = (message) => setAlertConfig({ message });
 
   useEffect(() => {
     let timer;
@@ -148,7 +159,7 @@ export default function DeliveryRouteMap({
       setResendCountdown(30);
     } catch (err) {
       console.error(err);
-      alert('Failed to send OTP');
+      showAlert('Failed to send OTP');
     }
   };
 
@@ -161,15 +172,15 @@ export default function DeliveryRouteMap({
         }
     });
       if (res.data.verified) {
-        alert('Delivery verified successfully!');
+        showAlert('Delivery verified successfully!');
         onDeliveryComplete?.();
         setShowOtpModal(false);
       } else {
-        alert(res.data.message || 'Invalid OTP. Try again.');
+        showAlert(res.data.message || 'Invalid OTP. Try again.');
       }
     } catch (err) {
       console.error(err);
-      alert('Error verifying OTP');
+      showAlert('Error verifying OTP');
     }
   };
 
@@ -355,7 +366,21 @@ export default function DeliveryRouteMap({
       {currentStep === 'toShop' ? (
         <button
           className="px-4 py-2 rounded mt-2 bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"
-          onClick={() => setCurrentStep('toCustomer')}
+          onClick={async () => {
+            try {
+              const token = await getToken();
+              await axios.post(`${API_URL}/api/delivery/markPickedUp`, {
+                clerkId: user?.id,
+                orderId: selectedOrder?.id
+              }, {
+                headers: { Authorization: `Bearer ${token}` }
+              });
+              setCurrentStep('toCustomer');
+            } catch (err) {
+              console.error(err);
+              showAlert('Failed to update status to picked up');
+            }
+          }}
         >
           Picked Up The Order
         </button>
@@ -437,6 +462,22 @@ export default function DeliveryRouteMap({
           </div>
         </div>
       )}
+
+      {typeof document !== 'undefined' && alertConfig && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center z-[10000] bg-black/60">
+          <div className="bg-[var(--card)] text-[var(--card-foreground)] p-6 rounded-2xl shadow-xl max-w-sm w-full mx-4 border border-[var(--border)] max-h-[90vh] overflow-y-auto">
+            <p className="text-sm font-medium mb-6 text-center">{alertConfig.message}</p>
+            <button
+              onClick={() => setAlertConfig(null)}
+              className="w-full py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-90 transition"
+            >
+              OK
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }

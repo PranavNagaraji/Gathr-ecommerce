@@ -138,7 +138,7 @@ export const getOnTheWay = async (req, res) => {
                 Cart(*, Cart_items(*, Items(*)))
             `)
             .eq('carrier_id', user.id)
-            .eq('status', 'ontheway');
+            .in('status', ['ontheway', 'picked_up']);
         if (error) {
             return res.status(403).json({ error });
         }
@@ -576,6 +576,37 @@ export const getPendingDeliveries = async (req, res) => {
         }
 
         return res.status(200).json({ orders });
+    } catch (err) {
+        console.error("Unexpected error:", err);
+        return res.status(500).json({ message: "Internal server error" });
+    }
+};
+
+export const markPickedUp = async (req, res) => {
+    try {
+        const { clerkId, orderId } = req.body;
+        if (!clerkId || !orderId) {
+            return res.status(400).json({ message: "Missing clerkId or orderId" });
+        }
+        const { data: user, error: userError } = await supabase
+            .from("Users")
+            .select("id, role")
+            .eq("clerk_id", clerkId)
+            .single();
+        if (userError || !user || user.role !== "carrier") {
+            return res.status(403).json({ message: "Unauthorized" });
+        }
+        
+        const { error: updateError } = await supabase
+            .from("Orders")
+            .update({ status: "picked_up" })
+            .eq("id", orderId);
+            
+        if (updateError) {
+            return res.status(500).json({ message: "Failed to update status", error: updateError.message });
+        }
+        
+        return res.status(200).json({ message: "Order marked as picked up" });
     } catch (err) {
         console.error("Unexpected error:", err);
         return res.status(500).json({ message: "Internal server error" });

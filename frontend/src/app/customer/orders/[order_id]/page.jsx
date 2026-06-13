@@ -2,6 +2,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { useEffect, useState, useRef, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { io } from "socket.io-client";
 import { useParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
@@ -30,6 +31,44 @@ const CartItems = () => {
   const [messages, setMessages] = useState([]);
   const routeLineRef = useRef(null);
   const [etaInfo, setEtaInfo] = useState(null);
+  
+  const [alertConfig, setAlertConfig] = useState(null);
+  const [confirmConfig, setConfirmConfig] = useState(null);
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('chatOpen');
+      if (saved) setChatOpen(saved === 'true');
+    } catch {}
+  }, []);
+
+  const toggleChat = () => {
+    setChatOpen(v => {
+      const next = !v;
+      try { localStorage.setItem('chatOpen', String(next)); } catch {}
+      return next;
+    });
+  };
+
+  const showAlert = (message) => {
+    setAlertConfig({ message });
+  };
+
+  const showConfirm = (message) => {
+    return new Promise((resolve) => {
+      setConfirmConfig({
+        message,
+        onConfirm: () => { setConfirmConfig(null); resolve(true); },
+        onCancel: () => { setConfirmConfig(null); resolve(false); }
+      });
+    });
+  };
+
   const getChatKey = (oid) => (oid ? `chat_${oid}` : null);
 
   const UserAvatar = ({ userObject, sizeClass = "w-12 h-12 text-sm" }) => {
@@ -337,14 +376,14 @@ const CartItems = () => {
       const prevItems = itemsRes?.data?.items || [];
       let status = await addItemsToCart(prevItems, token);
       if (status === 'DIFF_SHOP') {
-        const yes = window.confirm('Your current cart has items from another shop. Replace cart with this order\'s items?');
+        const yes = await showConfirm('Your current cart has items from another shop. Replace cart with this order\'s items?');
         if (!yes) { setReordering(false); return; }
         await clearCurrentCart(token);
         status = await addItemsToCart(prevItems, token);
       }
-      if (status === 'OK') alert('Items added to your cart');
+      if (status === 'OK') showAlert('Items added to your cart');
     } catch {
-      alert('Failed to reorder');
+      showAlert('Failed to reorder');
     } finally {
       setReordering(false);
     }
@@ -356,14 +395,14 @@ const CartItems = () => {
     if (!key) return;
     const nextAt = new Date(Date.now() + scheduleDays * 24 * 60 * 60 * 1000).toISOString();
     const payload = { frequencyDays: scheduleDays, nextAt };
-    try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); alert('Auto-reorder scheduled'); } catch { }
+    try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); showAlert('Auto-reorder scheduled'); } catch { }
     notifyAutoReorder('scheduled', payload);
   };
   const cancelSchedule = () => {
     if (!order?.cart_id) return;
     const key = scheduleKey(user?.id, order.cart_id);
     if (!key) return;
-    try { localStorage.removeItem(key); setScheduled(null); alert('Auto-reorder cancelled'); } catch { }
+    try { localStorage.removeItem(key); setScheduled(null); showAlert('Auto-reorder cancelled'); } catch { }
   };
 
   // If a schedule is due, prompt to execute now and roll forward
@@ -375,17 +414,17 @@ const CartItems = () => {
       if (Date.now() >= dueTs) {
         // Send a heads-up email before prompting
         notifyAutoReorder('due', { nextAt: scheduled.nextAt, frequencyDays: scheduled.frequencyDays });
-        const yes = window.confirm('Your scheduled auto-reorder is due. Reorder these items now?');
-        if (yes) {
-          (async () => {
+        (async () => {
+          const yes = await showConfirm('Your scheduled auto-reorder is due. Reorder these items now?');
+          if (yes) {
             await reorderNow();
             const key = scheduleKey(user?.id, order.cart_id);
             const freq = Number(scheduled.frequencyDays) || scheduleDays || 7;
             const nextAt = new Date(Date.now() + freq * 24 * 60 * 60 * 1000).toISOString();
             const payload = { frequencyDays: freq, nextAt };
             try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); } catch { }
-          })();
-        }
+          }
+        })();
       }
     } catch { }
   }, [scheduled?.nextAt, scheduled?.frequencyDays, user?.id, order?.cart_id]);
@@ -472,7 +511,7 @@ const CartItems = () => {
               {String(order.status || '').toLowerCase() === 'ontheway' && (
                 <div className="space-y-4">
                   <button
-                    onClick={() => setChatOpen((v) => !v)}
+                    onClick={toggleChat}
                     className="w-full md:w-auto px-6 py-3 font-semibold rounded-xl bg-neutral-900 text-white dark:bg-[var(--muted)] dark:text-[var(--muted-foreground)] hover:opacity-90 transition"
                   >
                     {chatOpen ? 'Hide Chat' : 'Chat with Delivery Partner'}
@@ -493,6 +532,7 @@ const CartItems = () => {
                             </div>
                           );
                         })}
+                        <div ref={messagesEndRef} />
                       </div>
                       <div className="flex items-center gap-2 p-3 border-t border-[var(--border)]">
                         <input
@@ -700,6 +740,46 @@ const CartItems = () => {
         )}
 
       </div>
+
+      {/* Modals */}
+      {typeof document !== 'undefined' && alertConfig && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center z-[10000] bg-black/60">
+          <div className="bg-[var(--card)] text-[var(--card-foreground)] p-6 rounded-2xl shadow-xl max-w-sm w-full mx-4 border border-[var(--border)] max-h-[90vh] overflow-y-auto">
+            <p className="text-sm font-medium mb-6 text-center">{alertConfig.message}</p>
+            <button
+              onClick={() => setAlertConfig(null)}
+              className="w-full py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-90 transition"
+            >
+              OK
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {typeof document !== 'undefined' && confirmConfig && createPortal(
+        <div className="fixed inset-0 flex items-center justify-center z-[10000] bg-black/60">
+          <div className="bg-[var(--card)] text-[var(--card-foreground)] p-6 rounded-2xl shadow-xl max-w-sm w-full mx-4 border border-[var(--border)] max-h-[90vh] overflow-y-auto">
+            <p className="text-sm font-medium mb-6 text-center">{confirmConfig.message}</p>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmConfig.onCancel}
+                className="flex-1 py-2.5 rounded-xl bg-[var(--muted)] text-[var(--muted-foreground)] font-semibold hover:bg-[var(--muted)]/80 transition border border-[var(--border)]"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmConfig.onConfirm}
+                className="flex-1 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-90 transition"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
     </div>
   );
 }

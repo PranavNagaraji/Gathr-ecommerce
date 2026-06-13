@@ -1,6 +1,6 @@
 import express from "express";
 import requireAuth from "../utils/check.js";
-import { acceptDelivery, createCarrier, getCarrier, getDelivery, getOnTheWay, completeDelivery, getAllOrders, updateCarrierLocation, getPendingDeliveries } from "../controllers/delivery.controller.js";
+import { acceptDelivery, createCarrier, getCarrier, getDelivery, getOnTheWay, completeDelivery, getAllOrders, updateCarrierLocation, getPendingDeliveries, markPickedUp } from "../controllers/delivery.controller.js";
 
 
 const router = express.Router();
@@ -14,5 +14,6 @@ router.post('/updateCarrier', requireAuth,createCarrier);
 router.post('/completeDelivery', requireAuth, completeDelivery);
 router.get('/getAllOrders/:clerkId', requireAuth, getAllOrders);
 router.post('/updateLocation', requireAuth, updateCarrierLocation);
+router.post('/markPickedUp', requireAuth, markPickedUp);
 
 export default router;

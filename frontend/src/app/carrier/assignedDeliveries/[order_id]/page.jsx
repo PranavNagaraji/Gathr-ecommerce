@@ -22,6 +22,27 @@ export default function AssignedDeliveryDetail() {
   const [chatInput, setChatInput] = useState('');
   const [messages, setMessages] = useState([]);
   const getChatKey = (oid) => (oid ? `chat_${oid}` : null);
+  
+  const messagesEndRef = useRef(null);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('chatOpen');
+      if (saved) setChatOpen(saved === 'true');
+    } catch {}
+  }, []);
+
+  const toggleChat = () => {
+    setChatOpen(v => {
+      const next = !v;
+      try { localStorage.setItem('chatOpen', String(next)); } catch {}
+      return next;
+    });
+  };
 
   const getShortAddress = (addr) => {
     if (!addr) return '-';
@@ -226,7 +247,7 @@ export default function AssignedDeliveryDetail() {
 
               <div className="space-y-4">
                 <button
-                  onClick={() => setChatOpen((v) => !v)}
+                  onClick={toggleChat}
                   className="w-full md:w-auto px-6 py-3 font-semibold rounded-xl bg-neutral-900 text-white dark:bg-[var(--muted)] dark:text-[var(--muted-foreground)] hover:opacity-90 transition"
                 >
                   {chatOpen ? 'Hide Chat' : 'Chat with Customer'}
@@ -255,6 +276,7 @@ export default function AssignedDeliveryDetail() {
                           </div>
                         );
                       })}
+                      <div ref={messagesEndRef} />
                     </div>
                     <div className="flex items-center gap-2 p-3 border-t border-[var(--border)]">
                       <input
