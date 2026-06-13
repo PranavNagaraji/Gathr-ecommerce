@@ -6,6 +6,7 @@
 [![Express](https://img.shields.io/badge/Express.js-5.1-lightgrey?logo=express)](https://expressjs.com)
 [![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green?logo=supabase)](https://supabase.com)
 [![Clerk](https://img.shields.io/badge/Auth-Clerk-purple?logo=clerk)](https://clerk.com)
+[![Redis](https://img.shields.io/badge/Redis-Cache%20%26%20PubSub-red?logo=redis)](https://redis.io)
 
 ---
 
