@@ -234,11 +234,11 @@ const CartItems = () => {
     fetchOrder();
   }, [isLoaded, isSignedIn, user, order_id, getToken, API_URL]);
 
-  // Realtime via Socket.IO when ontheway
+  // Realtime via Socket.IO when ontheway or picked_up
   useEffect(() => {
     if (!order || !API_URL) return;
-    const status = String(order.status || '').toLowerCase();
-    if (status !== 'ontheway') return;
+    const status = String(order.status || '').toLowerCase().replace(/'/g, '');
+    if (status !== 'ontheway' && status !== 'picked_up') return;
     if (socketRef.current) return;
     const s = io(API_URL, { withCredentials: true, transports: ["websocket", "polling"] });
     socketRef.current = s;
@@ -435,7 +435,7 @@ const CartItems = () => {
     return <div className="text-center mt-10 text-[var(--muted-foreground)]">No items in this cart.</div>;
 
   const statusLower = String(order?.status || '').toLowerCase().replace(/'/g, '');
-  const isPreparing = !['ontheway', 'delivered', 'cancelled'].includes(statusLower);
+  const isPreparing = !['ontheway', 'picked_up', 'delivered', 'cancelled'].includes(statusLower);
 
   return (
     <div className="min-h-screen p-4 md:p-8 bg-[var(--background)] text-[var(--foreground)]">
@@ -465,7 +465,7 @@ const CartItems = () => {
             <div className="lg:col-span-2 space-y-6">
 
               {/* Delivery Partner Details & ETA if on the way */}
-              {String(order.status || '').toLowerCase() === 'ontheway' && (
+              {['ontheway', 'picked_up'].includes(statusLower) && (
                 <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <div className="flex items-center gap-3">
@@ -501,14 +501,14 @@ const CartItems = () => {
               )}
 
               {/* Map View */}
-              {String(order.status || '').toLowerCase() === 'ontheway' && (
+              {['ontheway', 'picked_up'].includes(statusLower) && (
                 <div className="rounded-3xl overflow-hidden border border-[var(--border)] shadow-sm bg-[var(--card)] p-1">
                   <div ref={mapRef} className="w-full h-80 rounded-2xl" />
                 </div>
               )}
 
               {/* Chat Console */}
-              {String(order.status || '').toLowerCase() === 'ontheway' && (
+              {['ontheway', 'picked_up'].includes(statusLower) && (
                 <div className="space-y-4">
                   <button
                     onClick={toggleChat}

@@ -19,6 +19,7 @@ const Orders = () => {
     ordered: "bg-blue-100 text-blue-800",
     accepted: "bg-amber-100 text-amber-800",
     ontheway: "bg-purple-100 text-purple-800",
+    picked_up: "bg-purple-100 text-purple-800",
     delivered: "bg-green-100 text-green-800",
     cancelled: "bg-red-100 text-red-800",
   };
@@ -234,7 +235,8 @@ const Orders = () => {
                 <div className="mt-4">
                   <div className="grid grid-cols-4 items-center gap-2">
                     {deliverySteps.map((step, idx) => {
-                      const current = order.status?.toLowerCase?.()?.replace(/'/g, "");
+                      let current = order.status?.toLowerCase?.()?.replace(/'/g, "");
+                      if (current === 'picked_up') current = 'ontheway';
                       const currentIdx = deliverySteps.indexOf(current);
                       const completed = currentIdx >= idx;
                       return (
