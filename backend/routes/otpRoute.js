@@ -40,13 +40,13 @@ async function fetchOrderDetails(orderId) {
 function buildOtpEmailHtml(otp, orderDetails) {
   if (!orderDetails) {
     return `
-      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:20px">
-        <h2 style="margin:0 0 8px">Delivery Verification</h2>
-        <p style="margin:0 0 16px">Your verification code is:</p>
-        <div style="background:#f4f4f4;border-radius:8px;padding:16px;text-align:center;margin:0 0 16px">
-          <span style="font-size:32px;letter-spacing:6px;font-weight:700">${otp}</span>
+      <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;padding:20px;color:#111111">
+        <h2 style="margin:0 0 8px;color:#111111">Delivery Verification</h2>
+        <p style="margin:0 0 16px;color:#444444">Your verification code is:</p>
+        <div style="background:#f4f4f4;border-radius:8px;padding:16px;text-align:center;margin:0 0 16px;color:#111111">
+          <span style="font-size:32px;letter-spacing:6px;font-weight:700;color:#111111">${otp}</span>
         </div>
-        <p style="color:#666;font-size:13px">This code will expire in 5 minutes.</p>
+        <p style="color:#666666;font-size:13px">This code will expire in 5 minutes.</p>
       </div>`;
   }
 
@@ -79,14 +79,14 @@ function buildOtpEmailHtml(otp, orderDetails) {
     </table>` : "";
 
   return `
-    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#111">
-      <h2 style="margin:0 0 4px">Delivery Verification</h2>
-      <p style="margin:0 0 16px;color:#444">Hi ${customerName}, your delivery is on its way!</p>
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:560px;margin:0 auto;padding:20px;color:#111111">
+      <h2 style="margin:0 0 4px;color:#111111">Delivery Verification</h2>
+      <p style="margin:0 0 16px;color:#444444">Hi ${customerName}, your delivery is on its way!</p>
 
-      <div style="background:#f4f4f4;border-radius:8px;padding:16px;text-align:center;margin:0 0 16px">
-        <p style="margin:0 0 4px;font-size:13px;color:#555">Your OTP Code</p>
-        <span style="font-size:32px;letter-spacing:6px;font-weight:700">${otp}</span>
-        <p style="margin:8px 0 0;font-size:12px;color:#999">Valid for 5 minutes</p>
+      <div style="background:#f4f4f4;border-radius:8px;padding:16px;text-align:center;margin:0 0 16px;color:#111111">
+        <p style="margin:0 0 4px;font-size:13px;color:#555555">Your OTP Code</p>
+        <span style="font-size:32px;letter-spacing:6px;font-weight:700;color:#111111">${otp}</span>
+        <p style="margin:8px 0 0;font-size:12px;color:#999999">Valid for 5 minutes</p>
       </div>
 
       <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin:0 0 12px">
