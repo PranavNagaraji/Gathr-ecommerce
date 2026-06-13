@@ -146,8 +146,13 @@ app.post("/set-role", async (req, res) => {
   }
 });
 
-await createIndex();
-await seedFromSupabase();
-
 const port = process.env.PORT || 5000;
-server.listen(port, () => console.log("Backend + Socket.IO running"));
+
+server.listen(port, '0.0.0.0', () => {
+  console.log(`Backend + Socket.IO running on ${port}`);
+});
+
+// Non-blocking — won't delay startup
+createIndex()
+  .then(() => seedFromSupabase())
+  .catch(err => console.error("Redis init failed:", err));
