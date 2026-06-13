@@ -17,6 +17,7 @@ import notifyRoutes from "./routes/notifyRoute.js";
 import complaintsRoutes from "./routes/complaintsRoute.js";
 import adminRoutes from "./routes/adminRoute.js";
 import otpRouter from "./routes/otpRoute.js";
+import redisClient from "./redis/redis.js";
 
 const clerk = new Clerk({ secretKey: process.env.CLERK_SECRET_KEY });
 
@@ -41,14 +42,6 @@ const io = new SocketIOServer(server, {
 });
 
 io.on("connection", (socket) => {
-  // client will join order-specific room
-  socket.on("room:join", ({ orderId, role, name }) => {
-    if (!orderId) return;
-    const room = `order:${orderId}`;
-    socket.join(room);
-    io.to(room).emit("system:joined", { who: role || "user", name: name || "", ts: Date.now() });
-  });
-
   // carrier pushes location; broadcast to room
   socket.on("location:update", ({ orderId, lat, long }) => {
     if (!orderId || lat == null || long == null) return;
@@ -56,15 +49,29 @@ io.on("connection", (socket) => {
     io.to(room).emit("location:update", { lat: Number(lat), long: Number(long), ts: Date.now() });
   });
 
-  // chat messages (no persistence)
+  // chat messages (persistence via Redis)
+  socket.on("room:join", ({ orderId, role, name }) => {
+    if (!orderId) return;
+    const room = `order:${orderId}`;
+    socket.join(room);
+    io.to(room).emit("system:joined", { who: role || "user", name: name || "", ts: Date.now() });
+    redisClient.lRange(`chat:${orderId}`, 0, -1).then((msgs) => {
+      const history = msgs.map(m => JSON.parse(m));
+      socket.emit("chat:history", history);
+    }).catch(() => { });
+  });
   socket.on("chat:message", ({ orderId, from, text, name }) => {
     if (!orderId || !text) return;
     const room = `order:${orderId}`;
     // send to everyone EXCEPT the sender to avoid duplicates on sender
-    socket.to(room).emit("chat:message", { from: from || "user", text, name: name || "", ts: Date.now() });
+    const msg = { from: from || "user", text, name: name || "", ts: Date.now() };
+    redisClient.rPush(`chat:${orderId}`, JSON.stringify(msg))
+      .then(() => redisClient.lTrim(`chat:${orderId}`, -200, -1))
+      .then(() => redisClient.expire(`chat:${orderId}`, 60 * 60 * 24 * 7))
+      .catch(() => { });
+    socket.to(room).emit("chat:message", msg);
   });
 });
-
 // Razorpay webhook route
 app.post("/razorpay/webhook", express.json(), async (req, res, next) => {
   req.url = '/webhook';

@@ -78,14 +78,6 @@ export default function AssignedDeliveryDetail() {
         const found = list.find((o) => String(o.id) === String(params.order_id));
         if (found) {
           setOrder(found);
-          // Load chat memory
-          const key = getChatKey(found.id);
-          if (key && typeof window !== 'undefined') {
-            try {
-              const raw = localStorage.getItem(key);
-              if (raw) setMessages(JSON.parse(raw));
-            } catch (_) {}
-          }
         }
         else toast.error('Order not found');
       } catch (err) {
@@ -117,7 +109,7 @@ export default function AssignedDeliveryDetail() {
   useEffect(() => {
     if (!order || !API_URL) return;
     if (socketRef.current) return;
-    const s = io(API_URL, { withCredentials: true, transports: ['websocket','polling'] });
+    const s = io(API_URL, { withCredentials: true, transports: ['websocket', 'polling'] });
     socketRef.current = s;
     s.emit('room:join', { orderId: order.id, role: 'carrier', name: user?.fullName || '' });
     s.on('chat:message', (msg) => {
@@ -127,15 +119,11 @@ export default function AssignedDeliveryDetail() {
         setChatOpen(true);
       }
     });
+    s.on('chat:history', (history) => {
+      setMessages(history);
+    });
     return () => { s.disconnect(); socketRef.current = null; };
   }, [order?.id, API_URL, user?.fullName, chatOpen]);
-
-  // Persist chat memory per order in localStorage
-  useEffect(() => {
-    const key = getChatKey(order?.id);
-    if (!key || typeof window === 'undefined') return;
-    try { localStorage.setItem(key, JSON.stringify(messages.slice(-200))); } catch (_) {}
-  }, [messages, order?.id]);
 
   // Periodically publish carrier live location while on this page
   useEffect(() => {
@@ -149,7 +137,7 @@ export default function AssignedDeliveryDetail() {
           { clerkId: user.id, lat, long },
           { headers: { Authorization: `Bearer ${token}` } }
         );
-      } catch (_) {}
+      } catch (_) { }
       // Also emit via socket if available
       if (socketRef.current && order?.id) {
         socketRef.current.emit('location:update', { orderId: order.id, lat, long });
@@ -195,7 +183,6 @@ export default function AssignedDeliveryDetail() {
       );
       toast.success(res.data.message || 'Delivery completed');
       // Clear chat memory for this order
-      try { const key = getChatKey(order.id); if (key) localStorage.removeItem(key); } catch (_) {}
       router.push('/carrier/assignedDeliveries');
     } catch (error) {
       console.error('Error completing delivery:', error);
@@ -258,11 +245,10 @@ export default function AssignedDeliveryDetail() {
                         return (
                           <div key={i} className={`flex ${me ? 'justify-end' : 'justify-start'}`}>
                             <div
-                              className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${
-                                me
-                                  ? 'bg-[var(--primary)] text-[var(--primary-foreground)] rounded-br-none'
-                                  : 'bg-[var(--muted)]/60 text-[var(--foreground)] rounded-bl-none'
-                              }`}
+                              className={`max-w-[75%] px-4 py-2.5 rounded-2xl text-sm shadow-sm ${me
+                                ? 'bg-[var(--primary)] text-[var(--primary-foreground)] rounded-br-none'
+                                : 'bg-[var(--muted)]/60 text-[var(--foreground)] rounded-bl-none'
+                                }`}
                             >
                               {m.text}
                             </div>

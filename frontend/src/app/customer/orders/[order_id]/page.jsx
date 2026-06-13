@@ -81,7 +81,7 @@ const CartItems = () => {
         { clerkId: user?.id, cartId: order.cart_id, phase, ...payload },
         { headers: { Authorization: `Bearer ${token}` } }
       );
-    } catch {}
+    } catch { }
   };
 
   // Pre-notification one hour before due
@@ -102,7 +102,7 @@ const CartItems = () => {
           notifyAutoReorder('pre_due', { nextAt: scheduled.nextAt, frequencyDays: scheduled.frequencyDays, preWindowMinutes: 60 });
           if (key) localStorage.setItem(key, '1');
         }
-      } catch {}
+      } catch { }
     }
 
     // If more than 1 hour away, schedule a timeout to send at (due - 1h)
@@ -117,7 +117,7 @@ const CartItems = () => {
             notifyAutoReorder('pre_due', { nextAt: scheduled.nextAt, frequencyDays: scheduled.frequencyDays, preWindowMinutes: 60 });
             if (key) localStorage.setItem(key, '1');
           }
-        } catch {}
+        } catch { }
       }, fireIn);
     }
     return () => { if (tId) clearTimeout(tId); };
@@ -139,7 +139,7 @@ const CartItems = () => {
           iconSize: [25, 41], iconAnchor: [12, 41], popupAnchor: [1, -34], shadowSize: [41, 41]
         });
         Lmod.Marker.prototype.options.icon = defaultIcon;
-      } catch (_) {}
+      } catch (_) { }
     })();
   }, []);
 
@@ -170,7 +170,7 @@ const CartItems = () => {
     try {
       const raw = localStorage.getItem(key);
       if (raw) setScheduled(JSON.parse(raw));
-    } catch {}
+    } catch { }
   }, [user?.id, order?.cart_id]);
 
   // Fetch order (for status + carrier info)
@@ -186,19 +186,11 @@ const CartItems = () => {
         );
         const ord = res?.data?.order || null;
         setOrder(ord);
-        // Load chat memory for this order once we know the ID
-        const key = getChatKey(ord?.id);
-        if (key && typeof window !== 'undefined') {
-          try {
-            const raw = localStorage.getItem(key);
-            if (raw) setMessages(JSON.parse(raw));
-          } catch (_) {}
-        }
         const loc = ord?.Users?.delivery_details?.current_location;
         if (loc && (loc.lat != null) && (loc.long != null)) {
           setDriverLoc({ lat: Number(loc.lat), lng: Number(loc.long) });
         }
-      } catch (_) {}
+      } catch (_) { }
     };
     fetchOrder();
   }, [isLoaded, isSignedIn, user, order_id, getToken, API_URL]);
@@ -209,7 +201,7 @@ const CartItems = () => {
     const status = String(order.status || '').toLowerCase();
     if (status !== 'ontheway') return;
     if (socketRef.current) return;
-    const s = io(API_URL, { withCredentials: true, transports: ["websocket","polling"] });
+    const s = io(API_URL, { withCredentials: true, transports: ["websocket", "polling"] });
     socketRef.current = s;
     s.emit("room:join", { orderId: order.id, role: "customer", name: user?.fullName || user?.firstName || "" });
     s.on("location:update", ({ lat, long }) => {
@@ -218,29 +210,17 @@ const CartItems = () => {
     s.on("chat:message", (msg) => {
       setMessages((prev) => [...prev.slice(-199), msg]);
     });
+    //chat persistence in the form of chat:history 
+    // the same changes are done to support in carrier\assignedDeliveries\[order_id]\page.jsx
+    s.on("chat:history", (history) => {
+      setMessages(history);
+    });
     return () => {
       s.disconnect();
       socketRef.current = null;
     };
   }, [order?.id, order?.status, API_URL]);
 
-  // Persist chat memory per order in localStorage
-  useEffect(() => {
-    const key = getChatKey(order?.id);
-    if (!key || typeof window === 'undefined') return;
-    try {
-      localStorage.setItem(key, JSON.stringify(messages.slice(-200)));
-    } catch (_) {}
-  }, [messages, order?.id]);
-
-  // Clear chat memory when order is delivered
-  useEffect(() => {
-    const key = getChatKey(order?.id);
-    if (!key || typeof window === 'undefined') return;
-    if (String(order?.status || '').toLowerCase() === 'delivered') {
-      try { localStorage.removeItem(key); } catch (_) {}
-    }
-  }, [order?.status, order?.id]);
 
   const sendMessage = () => {
     const text = chatInput.trim();
@@ -276,7 +256,7 @@ const CartItems = () => {
 
     // PNG marker icons
     const shadowUrl = 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png';
-    const pngIcon = (path) => L.icon({ iconUrl: path, shadowUrl, iconSize: [32,32], iconAnchor: [16,32], popupAnchor: [0,-28], shadowSize: [41,41] });
+    const pngIcon = (path) => L.icon({ iconUrl: path, shadowUrl, iconSize: [32, 32], iconAnchor: [16, 32], popupAnchor: [0, -28], shadowSize: [41, 41] });
     const destIcon = pngIcon('/destination.png');
     const driverIcon = pngIcon('/motorbike.png');
 
@@ -322,7 +302,7 @@ const CartItems = () => {
         const min = Math.ceil((route.duration || 0) / 60);
         setEtaInfo({ km: Number(km.toFixed(1)), min });
       })
-      .catch(() => {});
+      .catch(() => { });
   }, [driverLoc?.lat, driverLoc?.lng, order?.Addresses?.location]);
 
   const clearCurrentCart = async (token) => {
@@ -331,7 +311,7 @@ const CartItems = () => {
     for (const ci of items) {
       try {
         await axios.post(`${API_URL}/api/customer/deleteFromCart`, { clerkId: user.id, itemId: ci.item_id, quantity: ci.quantity }, { headers: { Authorization: `Bearer ${token}` } });
-      } catch {}
+      } catch { }
     }
   };
 
@@ -376,14 +356,14 @@ const CartItems = () => {
     if (!key) return;
     const nextAt = new Date(Date.now() + scheduleDays * 24 * 60 * 60 * 1000).toISOString();
     const payload = { frequencyDays: scheduleDays, nextAt };
-    try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); alert('Auto-reorder scheduled'); } catch {}
+    try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); alert('Auto-reorder scheduled'); } catch { }
     notifyAutoReorder('scheduled', payload);
   };
   const cancelSchedule = () => {
     if (!order?.cart_id) return;
     const key = scheduleKey(user?.id, order.cart_id);
     if (!key) return;
-    try { localStorage.removeItem(key); setScheduled(null); alert('Auto-reorder cancelled'); } catch {}
+    try { localStorage.removeItem(key); setScheduled(null); alert('Auto-reorder cancelled'); } catch { }
   };
 
   // If a schedule is due, prompt to execute now and roll forward
@@ -403,11 +383,11 @@ const CartItems = () => {
             const freq = Number(scheduled.frequencyDays) || scheduleDays || 7;
             const nextAt = new Date(Date.now() + freq * 24 * 60 * 60 * 1000).toISOString();
             const payload = { frequencyDays: freq, nextAt };
-            try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); } catch {}
+            try { localStorage.setItem(key, JSON.stringify(payload)); setScheduled(payload); } catch { }
           })();
         }
       }
-    } catch {}
+    } catch { }
   }, [scheduled?.nextAt, scheduled?.frequencyDays, user?.id, order?.cart_id]);
 
   if (loading) return <div className="text-center mt-10 text-[var(--muted-foreground)]">Loading items...</div>;
@@ -421,7 +401,7 @@ const CartItems = () => {
   return (
     <div className="min-h-screen p-4 md:p-8 bg-[var(--background)] text-[var(--foreground)]">
       <div className="max-w-6xl mx-auto">
-        
+
         {/* Header */}
         <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
           <div>
@@ -434,17 +414,17 @@ const CartItems = () => {
           </div>
           {order && (
             <span className="px-3 py-1 rounded-full text-xs font-semibold bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300 capitalize">
-              {order.status?.replace(/'/g,'') || 'pending'}
+              {order.status?.replace(/'/g, '') || 'pending'}
             </span>
           )}
         </div>
 
         {order && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 items-start">
-            
+
             {/* Left Column (2/3 width): Live Tracking / Status, Map, Chat */}
             <div className="lg:col-span-2 space-y-6">
-              
+
               {/* Delivery Partner Details & ETA if on the way */}
               {String(order.status || '').toLowerCase() === 'ontheway' && (
                 <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
@@ -491,8 +471,8 @@ const CartItems = () => {
               {/* Chat Console */}
               {String(order.status || '').toLowerCase() === 'ontheway' && (
                 <div className="space-y-4">
-                  <button 
-                    onClick={() => setChatOpen((v) => !v)} 
+                  <button
+                    onClick={() => setChatOpen((v) => !v)}
                     className="w-full md:w-auto px-6 py-3 font-semibold rounded-xl bg-neutral-900 text-white dark:bg-[var(--muted)] dark:text-[var(--muted-foreground)] hover:opacity-90 transition"
                   >
                     {chatOpen ? 'Hide Chat' : 'Chat with Delivery Partner'}
@@ -515,12 +495,12 @@ const CartItems = () => {
                         })}
                       </div>
                       <div className="flex items-center gap-2 p-3 border-t border-[var(--border)]">
-                        <input 
-                          value={chatInput} 
-                          onChange={(e) => setChatInput(e.target.value)} 
-                          onKeyDown={(e)=>{ if(e.key==='Enter') sendMessage(); }} 
-                          placeholder="Type a message..." 
-                          className="flex-1 bg-transparent px-4 py-2.5 rounded-xl border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30 text-sm" 
+                        <input
+                          value={chatInput}
+                          onChange={(e) => setChatInput(e.target.value)}
+                          onKeyDown={(e) => { if (e.key === 'Enter') sendMessage(); }}
+                          placeholder="Type a message..."
+                          className="flex-1 bg-transparent px-4 py-2.5 rounded-xl border border-[var(--border)] focus:outline-none focus:ring-2 focus:ring-[var(--ring)]/30 text-sm"
                         />
                         <button onClick={sendMessage} className="px-5 py-2.5 rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] font-semibold hover:opacity-95 transition">Send</button>
                       </div>
@@ -572,26 +552,26 @@ const CartItems = () => {
 
             {/* Right Column (1/3 width): Sidebar Info (Reorder, Address, Shop, Items, Bill) */}
             <div className="space-y-6">
-              
+
               {/* Reorder and Scheduling Actions */}
               <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-4">
                 <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
                   Order Actions
                 </h3>
-                <button 
-                  disabled={reordering} 
-                  onClick={reorderNow} 
+                <button
+                  disabled={reordering}
+                  onClick={reorderNow}
                   className="w-full py-3 font-semibold rounded-xl bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90 disabled:opacity-60 transition text-sm"
                 >
                   {reordering ? 'Reordering…' : 'Reorder These Items'}
                 </button>
-                
+
                 <div className="border-t border-[var(--border)] pt-4 space-y-3">
                   <span className="text-xs text-[var(--muted-foreground)] block font-semibold">Auto-Reorder Schedule</span>
                   <div className="flex gap-2">
-                    <select 
-                      value={scheduleDays} 
-                      onChange={(e)=>setScheduleDays(Number(e.target.value)||7)} 
+                    <select
+                      value={scheduleDays}
+                      onChange={(e) => setScheduleDays(Number(e.target.value) || 7)}
                       className="flex-1 border border-[var(--border)] rounded-xl px-3 py-2 bg-[var(--card)] text-sm focus:outline-none"
                     >
                       <option value={7}>Every 7 days</option>
@@ -599,15 +579,15 @@ const CartItems = () => {
                       <option value={30}>Every 30 days</option>
                     </select>
                     {scheduled ? (
-                      <button 
-                        onClick={cancelSchedule} 
+                      <button
+                        onClick={cancelSchedule}
                         className="px-3 py-2 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-[var(--muted)] transition"
                       >
                         Cancel
                       </button>
                     ) : (
-                      <button 
-                        onClick={saveSchedule} 
+                      <button
+                        onClick={saveSchedule}
                         className="px-3 py-2 rounded-xl border border-[var(--border)] text-xs font-semibold hover:bg-[var(--muted)] transition"
                       >
                         Schedule
@@ -624,7 +604,7 @@ const CartItems = () => {
 
               {/* Details card */}
               <div className="border border-[var(--border)] rounded-3xl p-6 bg-[var(--card)] text-[var(--card-foreground)] shadow-sm space-y-6">
-                
+
                 {/* Customer Details */}
                 <div className="space-y-3">
                   <h3 className="text-xs font-bold text-[var(--muted-foreground)] uppercase tracking-widest">
@@ -673,9 +653,9 @@ const CartItems = () => {
                   </h3>
                   <div className="space-y-3 max-h-56 overflow-y-auto pr-1">
                     {items.map((item) => (
-                      <Link 
-                        key={item.id} 
-                        href={`/customer/getShops/${item.Items?.shop_id}/item/${item.Items?.id}`} 
+                      <Link
+                        key={item.id}
+                        href={`/customer/getShops/${item.Items?.shop_id}/item/${item.Items?.id}`}
                         className="flex items-center justify-between text-sm gap-4 group hover:no-underline"
                       >
                         <div className="truncate text-[var(--foreground)] group-hover:text-[var(--primary)] transition-colors">
@@ -711,7 +691,7 @@ const CartItems = () => {
                     </span>
                   </div>
                 </div>
-                
+
               </div>
 
             </div>
