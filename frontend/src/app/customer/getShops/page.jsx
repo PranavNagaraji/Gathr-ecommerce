@@ -5,7 +5,7 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
-import { Heart } from "lucide-react";
+import { Heart, Store } from "lucide-react";
 import { toast } from "react-hot-toast";
 
 function CustomerDashboardContent() {
@@ -834,9 +834,7 @@ function CustomerDashboardContent() {
         ) : filteredShops.length === 0 ? (
           <div className="mt-10 flex flex-col items-center justify-center text-center border border-dashed border-[var(--border)] rounded-2xl p-10 bg-[var(--card)]/40">
             <div className="w-24 h-24 rounded-full bg-[var(--muted)] flex items-center justify-center mb-4">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="w-10 h-10 text-[var(--muted-foreground)]">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M3 3h3l.4 2M7 13h10l2-8H6.4M7 13l-1.293 1.293A1 1 0 006 15h2m-1-2v6a2 2 0 002 2h8a2 2 0 002-2v-6" />
-              </svg>
+              <Store className="w-10 h-10 text-[var(--muted-foreground)]" />
             </div>
             <h2 className="text-2xl font-semibold">No shops nearby</h2>
             <p className="mt-2 text-[var(--muted-foreground)] max-w-md">We couldn't find shops based on your current filters or location. Try adjusting filters or check again later.</p>

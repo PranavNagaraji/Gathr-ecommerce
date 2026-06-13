@@ -3,7 +3,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { useEffect, useState, useCallback, useRef } from "react";
-import { Trash2, Plus, Minus, ShoppingBag, ArrowRight } from "lucide-react";
+import { Trash2, Plus, Minus, ShoppingBag, ShoppingCart, ArrowRight } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { toast } from "react-hot-toast";
 import { motion, AnimatePresence } from "framer-motion";
@@ -236,7 +236,7 @@ const Cart = () => {
         // Empty state
         <div className="mt-10 flex flex-col items-center justify-center text-center border border-dashed border-[var(--border)] rounded-2xl p-10 bg-[var(--card)]/40">
           <div className="w-24 h-24 rounded-full bg-[var(--muted)] flex items-center justify-center mb-4">
-            <ShoppingBag className="w-10 h-10 text-[var(--muted-foreground)]" />
+            <ShoppingCart className="w-10 h-10 text-[var(--muted-foreground)]" />
           </div>
           <h2 className="text-2xl font-semibold">Your cart is empty</h2>
           <p className="mt-2 text-[var(--muted-foreground)] max-w-md">
