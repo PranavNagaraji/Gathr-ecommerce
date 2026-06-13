@@ -27,8 +27,11 @@ export async function sendEmail({ to, subject, html, text }) {
     MJ_SENDER_EMAIL
   } = process.env;
 
-  // 1. Try SMTP if configured
-  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
+  const isRender = process.env.RENDER === "true";
+  const hasMailjet = !!(MJ_APIKEY_PUBLIC && MJ_APIKEY_PRIVATE && MJ_SENDER_EMAIL);
+
+  // 1. Try SMTP if configured (Skip SMTP on Render if Mailjet is configured to avoid network timeout delays)
+  if (SMTP_HOST && SMTP_USER && SMTP_PASS && (!isRender || !hasMailjet)) {
     try {
       console.log(`[mailer] Attempting to send email via SMTP to ${to}...`);
       const isSecure = SMTP_SECURE === "true" || SMTP_PORT === "465";
@@ -40,6 +43,8 @@ export async function sendEmail({ to, subject, html, text }) {
           user: SMTP_USER,
           pass: SMTP_PASS,
         },
+        connectionTimeout: 5000, // 5 seconds connection timeout
+        greetingTimeout: 5000,   // 5 seconds greeting timeout
         tls: {
           // Do not fail on invalid / self-signed certs (useful for free public domains SMTP like rediffmail)
           rejectUnauthorized: false,
