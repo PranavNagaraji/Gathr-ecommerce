@@ -1,5 +1,3 @@
-// Written entirely by Ankit Kumar
-// Payment Cancelled Page
 'use client'
 import { XCircle, ArrowLeft, ShoppingBag } from 'lucide-react';
 import { useRouter } from 'next/navigation';
