@@ -500,4 +500,4 @@ This project is developed as part of a software engineering capstone and is inte
 
 **Last Updated**: June 2026  
 **Version**: 1.0.0  
-**Maintainers**: Gathr Engineering Team
+**Maintainer(s)**: pranavnagaraji22@gmail.com
