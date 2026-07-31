@@ -9,8 +9,9 @@ const isPublicRoute = createRouteMatcher([
   '/sso-callback',
   '/payment-success',
   '/payment-cancelled',
-  '/admin/:path',
+  '/admin/:path*',
   '/admin',
+  '/admin/(.*)',
   '/about',
   '/contact',
 ]);
@@ -20,58 +21,67 @@ const merchantRoutes = createRouteMatcher(['/merchant', '/merchant/:path*']);
 const carrierRoutes = createRouteMatcher(['/carrier', '/carrier/:path*']);
 
 export default clerkMiddleware(async (auth, req) => {
-  const client = await clerkClient();
+  const pathname = req.nextUrl.pathname;
+
+  // Allow admin and public callback routes to pass without role redirects
+  if (pathname.startsWith('/admin') || pathname === '/auth-callback' || pathname === '/sso-callback') {
+    return;
+  }
+
   const { userId } = await auth();
 
   // If user is logged in
   if (userId) {
-    const user = await client.users.getUser(userId);
-    const role = user.publicMetadata.role;
+    let role = null;
+    try {
+      const client = await clerkClient();
+      const user = await client.users.getUser(userId);
+      role = user.publicMetadata?.role || user.unsafeMetadata?.intended_role || null;
+    } catch (err) {
+      console.error("Middleware failed to fetch Clerk user metadata:", err);
+    }
 
     // Redirect logged-in users away from sign-in/sign-up
-    if (req.nextUrl.pathname === '/sign-in' || req.nextUrl.pathname === '/sign-up') {
-      // Has a role → go to their dashboard
+    if (pathname === '/sign-in' || pathname === '/sign-up') {
       if (role) {
         const dest =
           role === 'merchant' ? '/merchant/dashboard' :
           role === 'customer' ? '/customer/dashboard' :
-          role === 'carrier'  ? '/carrier/dashboard'  : '/';
+          role === 'carrier'  ? '/carrier/dashboard'  : '/customer/dashboard';
         return NextResponse.redirect(new URL(dest, req.url));
       }
-      // No role yet: if hitting sign-in, push them to sign-up to pick a role
-      if (req.nextUrl.pathname === '/sign-in') {
-        return NextResponse.redirect(new URL('/sign-up', req.url));
-      }
-      // No role on /sign-up → let them through (they'll pick role on the form)
+      // Logged in but role not resolved yet: allow sign-up/sign-in page to proceed
       return;
     }
 
     // Send logged-in users hitting root to their dashboards
-    if (req.nextUrl.pathname === '/') {
-      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'customer' ? '/customer/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/sign-up';
+    if (pathname === '/') {
+      const dest =
+        role === 'merchant' ? '/merchant/dashboard' :
+        role === 'carrier'  ? '/carrier/dashboard'  : '/customer/dashboard';
       return NextResponse.redirect(new URL(dest, req.url));
     }
 
     // Protect role areas
     if (customerRoutes(req)) {
-      if (role === 'customer') return;
-      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/';
+      if (!role || role === 'customer') return;
+      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/customer/dashboard';
       return NextResponse.redirect(new URL(dest, req.url));
     }
 
     if (merchantRoutes(req)) {
       if (role === 'merchant') return;
-      const dest = role === 'customer' ? '/customer/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/';
+      const dest = role === 'customer' ? '/customer/dashboard' : role === 'carrier' ? '/carrier/dashboard' : '/customer/dashboard';
       return NextResponse.redirect(new URL(dest, req.url));
     }
 
     if (carrierRoutes(req)) {
       if (role === 'carrier') return;
-      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'customer' ? '/customer/dashboard' : '/';
+      const dest = role === 'merchant' ? '/merchant/dashboard' : role === 'customer' ? '/customer/dashboard' : '/customer/dashboard';
       return NextResponse.redirect(new URL(dest, req.url));
     }
 
-    return; // logged-in user allowed
+    return; // logged-in user allowed for other public/authenticated routes
   }
 
   // If user is NOT logged in
@@ -81,12 +91,11 @@ export default clerkMiddleware(async (auth, req) => {
   return NextResponse.redirect(new URL('/sign-in', req.url));
 });
 
-
 export const config = {
-    matcher: [
-        // Skip Next.js internals and all static files, unless found in search params
-        '/((?!_next|[^?]*\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
-        // Always run for API routes
-        '/(api|trpc)(.*)',
-    ],
-}
+  matcher: [
+    // Skip Next.js internals and all static files, unless found in search params
+    '/((?!_next|[^?]*\\.(?:html?|css|js(?!on)|jpe?g|webp|png|gif|svg|ttf|woff2?|ico|csv|docx?|xlsx?|zip|webmanifest)).*)',
+    // Always run for API routes
+    '/(api|trpc)(.*)',
+  ],
+};

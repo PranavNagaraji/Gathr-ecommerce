@@ -11,8 +11,7 @@ try {
     // console.log(await client.get("test"));
     // await client.del("test");
 } catch (error) {
-    console.log(error);
-    process.exit(1);
+    console.warn("Redis connection failed. Running backend without Redis cache:", error.message);
 }
 
 export default client;
