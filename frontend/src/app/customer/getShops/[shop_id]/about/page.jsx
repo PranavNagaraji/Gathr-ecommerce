@@ -133,7 +133,7 @@ export default function ShopAboutPage() {
                   {hasCoords ? (
                     <iframe
                       title="Shop Location"
-                      src={`https://maps.google.com/maps?q=${encodeURIComponent(lat)},${encodeURIComponent(lng)}&z=15&output=embed`}
+                      src={`https://www.openstreetmap.org/export/embed.html?bbox=${lng - 0.01},${lat - 0.01},${lng + 0.01},${lat + 0.01}&layer=mapnik&marker=${lat},${lng}`}
                       className="w-full h-72"
                       loading="lazy"
                       referrerPolicy="no-referrer-when-downgrade"
@@ -144,7 +144,7 @@ export default function ShopAboutPage() {
                 </div>
                 {hasCoords && (
                   <a
-                    href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(lat)},${encodeURIComponent(lng)}`}
+                    href={`https://www.openstreetmap.org/?mlat=${lat}&mlon=${lng}#map=15/${lat}/${lng}`}
                     target="_blank"
                     rel="noreferrer"
                     className="inline-flex items-center gap-2 mt-3 px-4 py-2 rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)] hover:opacity-90"

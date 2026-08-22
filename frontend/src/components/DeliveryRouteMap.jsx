@@ -3,7 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import axios from 'axios';
 import { useAuth, useUser } from '@clerk/nextjs';
-import { useJsApiLoader } from '@react-google-maps/api';
+import { getDrivingRoute } from '@/lib/geo';
 import 'leaflet/dist/leaflet.css';
 
 const containerStyle = {
@@ -19,9 +19,6 @@ export default function DeliveryRouteMap({
   selectedOrder,
   onDeliveryComplete,
 }) {
-  const { isLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-  });
   const { getToken } = useAuth();
   const { user } = useUser();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
@@ -234,45 +231,39 @@ export default function DeliveryRouteMap({
   const routeOrigin = carrierForRouting;
   const routeDestination = currentStep === 'toShop' ? shop : customer;
 
-  // Compute route via Google JS DirectionsService, render as Leaflet Polyline
+  // Compute route via OSRM (OpenRouteService), render as Leaflet Polyline
   useEffect(() => {
-    if (!isLoaded || !routeOrigin || !routeDestination) return;
-    const svc = new window.google.maps.DirectionsService();
-    svc.route(
-      {
-        origin: routeOrigin,
-        destination: routeDestination,
-        travelMode: 'DRIVING',
-      },
-      (result, status) => {
-        if (status === 'OK' && result) {
-          setDirections(result);
-          const path = result.routes?.[0]?.overview_path || [];
-          const coords = path.map((p) => [p.lat(), p.lng()]);
-          // draw/update polyline on Leaflet map
-          const L = LRef.current;
-          if (mapInstanceRef.current && L) {
-            if (routeLineRef.current) {
-              routeLineRef.current.setLatLngs(coords);
-            } else {
-              routeLineRef.current = L.polyline(coords, { color: 'blue' }).addTo(mapInstanceRef.current);
-            }
-            // Only auto-fit once, and never after user has interacted (to preserve their zoom)
-            if (!didInitFitRef.current && !userInteractedRef.current && coords.length) {
-              mapInstanceRef.current.fitBounds(L.latLngBounds(coords), { padding: [20, 20] });
-              didInitFitRef.current = true;
-            }
+    if (!routeOrigin || !routeDestination) return;
+    let cancelled = false;
+    getDrivingRoute(routeOrigin, routeDestination)
+      .then((result) => {
+        if (cancelled || !result) return;
+        const coords = result.coords;
+        setDirections(result);
+        // draw/update polyline on Leaflet map
+        const L = LRef.current;
+        if (mapInstanceRef.current && L) {
+          if (routeLineRef.current) {
+            routeLineRef.current.setLatLngs(coords);
+          } else {
+            routeLineRef.current = L.polyline(coords, { color: 'blue' }).addTo(mapInstanceRef.current);
           }
-        } else if (status !== 'NOT_FOUND') {
-          console.error(`Directions request failed: ${status}`);
-          if (routeLineRef.current && mapInstanceRef.current) {
-            mapInstanceRef.current.removeLayer(routeLineRef.current);
-            routeLineRef.current = null;
+          // Only auto-fit once, and never after user has interacted (to preserve their zoom)
+          if (!didInitFitRef.current && !userInteractedRef.current && coords.length) {
+            mapInstanceRef.current.fitBounds(L.latLngBounds(coords), { padding: [20, 20] });
+            didInitFitRef.current = true;
           }
         }
-      }
-    );
-  }, [isLoaded, currentStep, routeOrigin?.lat, routeOrigin?.lng, routeDestination?.lat, routeDestination?.lng]);
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('Route request failed:', err.message);
+        if (routeLineRef.current && mapInstanceRef.current) {
+          mapInstanceRef.current.removeLayer(routeLineRef.current);
+          routeLineRef.current = null;
+        }
+      });
+    return () => { cancelled = true; };
+  }, [currentStep, routeOrigin?.lat, routeOrigin?.lng, routeDestination?.lat, routeDestination?.lng]);
 
   // Initialize and update Leaflet map and markers
   useEffect(() => {

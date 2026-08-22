@@ -8,14 +8,13 @@ import 'leaflet/dist/leaflet.css';
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
 import markerShadow from 'leaflet/dist/images/marker-shadow.png';
-import { useJsApiLoader, StandaloneSearchBox } from "@react-google-maps/api";
+import { reverseGeocode, searchAddress } from "@/lib/geo";
 import { showToast } from "@/components/ui/Notification";
 
 export default function AddressManager() {
   const { user } = useUser();
   const { isLoaded, isSignedIn, getToken } = useAuth();
   const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL;
-  const GOOGLE_MAPS_API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY;
 
   const [addresses, setAddresses] = useState([]);
   const [addressToggle, setAddressToggle] = useState(false);
@@ -26,13 +25,11 @@ export default function AddressManager() {
     location: { latitude: "", longitude: "" },
   });
   const leafletMapRef = useRef(null);
-  const [searchBox, setSearchBox] = useState(null);
-  const Libraries = ["places"];
-  
-  const { isLoaded: mapLoaded } = useJsApiLoader({
-    googleMapsApiKey: GOOGLE_MAPS_API_KEY,
-    libraries: Libraries,
-  });
+  // Address search state
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState([]);
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+  const searchDebounceRef = useRef(null);
 
   useEffect(() => {
     let isMounted = true;
@@ -73,24 +70,21 @@ export default function AddressManager() {
     getAddresses();
   }, [isLoaded, isSignedIn, user, getToken, API_URL]);
 
-  const updateAddressFromCoords = (lat, lng) => {
+  const updateAddressFromCoords = async (lat, lng) => {
     setAddAddress((prev) => ({
       ...prev,
       location: { latitude: lat, longitude: lng },
     }));
-
-    if (window.google && window.google.maps) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === "OK" && results[0]) {
-          setAddAddress((prev) => ({
-            ...prev,
-            address: results[0].formatted_address,
-            location: { latitude: lat, longitude: lng },
-          }));
-        }
-      });
-    }
+    try {
+      const addr = await reverseGeocode(lat, lng);
+      if (addr) {
+        setAddAddress((prev) => ({
+          ...prev,
+          address: addr,
+          location: { latitude: lat, longitude: lng },
+        }));
+      }
+    } catch {}
   };
 
   const handleFetchCurrentLocation = () => {
@@ -100,41 +94,24 @@ export default function AddressManager() {
     }
     setFetchingLocation(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-        
-        if (window.google && window.google.maps) {
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            setFetchingLocation(false);
-            if (status === "OK" && results[0]) {
-              setAddAddress((prev) => ({
-                ...prev,
-                address: results[0].formatted_address,
-                location: { latitude: lat, longitude: lng },
-              }));
-              if (leafletMapRef.current) {
-                leafletMapRef.current.setView([lat, lng], 15);
-              }
-            } else {
-              setAddAddress((prev) => ({
-                ...prev,
-                address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-                location: { latitude: lat, longitude: lng },
-              }));
-              if (leafletMapRef.current) {
-                leafletMapRef.current.setView([lat, lng], 15);
-              }
-            }
-          });
-        } else {
-          setFetchingLocation(false);
+        try {
+          const addr = await reverseGeocode(lat, lng);
+          setAddAddress((prev) => ({
+            ...prev,
+            address: addr || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+            location: { latitude: lat, longitude: lng },
+          }));
+        } catch {
           setAddAddress((prev) => ({
             ...prev,
             address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
             location: { latitude: lat, longitude: lng },
           }));
+        } finally {
+          setFetchingLocation(false);
           if (leafletMapRef.current) {
             leafletMapRef.current.setView([lat, lng], 15);
           }
@@ -146,6 +123,43 @@ export default function AddressManager() {
       },
       { timeout: 8000 }
     );
+  };
+
+  // ── Address search handlers ───────────────────────────────────────────────
+  const handleSearchChange = (e) => {
+    const q = e.target.value;
+    setSearchQuery(q);
+    setAddAddress((p) => ({ ...p, address: q }));
+    clearTimeout(searchDebounceRef.current);
+    if (q.trim().length < 3) {
+      setSearchResults([]);
+      setShowSearchDropdown(false);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchAddress(q);
+        setSearchResults(results);
+        setShowSearchDropdown(results.length > 0);
+      } catch {
+        setSearchResults([]);
+        setShowSearchDropdown(false);
+      }
+    }, 400);
+  };
+
+  const handleSearchSelect = (result) => {
+    setShowSearchDropdown(false);
+    setSearchResults([]);
+    setSearchQuery(result.description);
+    setAddAddress((prev) => ({
+      ...prev,
+      address: result.description,
+      location: { latitude: result.lat, longitude: result.lng },
+    }));
+    if (leafletMapRef.current) {
+      leafletMapRef.current.setView([result.lat, result.lng], 15);
+    }
   };
 
   const handleAddAddress = async () => {
@@ -291,44 +305,34 @@ export default function AddressManager() {
                   {fetchingLocation ? "Locating..." : "Use Current Location"}
                 </button>
               </div>
-              {mapLoaded ? (
-                <StandaloneSearchBox
-                  onLoad={(ref) => setSearchBox(ref)}
-                  onPlacesChanged={() => {
-                    if (!searchBox) return;
-                    const places = searchBox.getPlaces();
-                    if (!places || places.length === 0) return;
-                    const place = places[0];
-                    setAddAddress((prev) => ({
-                      ...prev,
-                      address: place.formatted_address || prev.address,
-                      location: {
-                        latitude: place.geometry.location.lat(),
-                        longitude: place.geometry.location.lng(),
-                      },
-                    }));
-                    if (leafletMapRef.current) {
-                      leafletMapRef.current.setView([place.geometry.location.lat(), place.geometry.location.lng()], 15);
-                    }
-                  }}
-                >
-                  <input
-                    type="text"
-                    placeholder="Search Address"
-                    value={addAddress.address}
-                    onChange={(e) => setAddAddress((p) => ({ ...p, address: e.target.value }))}
-                    className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
-                  />
-                </StandaloneSearchBox>
-              ) : (
+              <div className="relative">
                 <input
                   type="text"
-                  placeholder="Address"
-                  value={addAddress.address}
-                  onChange={(e) => setAddAddress((p) => ({ ...p, address: e.target.value }))}
+                  placeholder="Search Address"
+                  value={searchQuery || addAddress.address}
+                  onChange={handleSearchChange}
+                  onBlur={() => setTimeout(() => setShowSearchDropdown(false), 160)}
+                  onFocus={() => searchResults.length > 0 && setShowSearchDropdown(true)}
+                  autoComplete="off"
                   className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)] focus:outline-none focus:ring-1 focus:ring-[var(--primary)]"
                 />
-              )}
+                {showSearchDropdown && searchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 z-[99999] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden">
+                    {searchResults.map((r, idx) => (
+                      <button
+                        key={r.place_id}
+                        type="button"
+                        onMouseDown={() => handleSearchSelect(r)}
+                        className={`w-full text-left px-3 py-2.5 text-sm hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors ${
+                          idx < searchResults.length - 1 ? 'border-b border-[var(--border)]' : ''
+                        }`}
+                      >
+                        {r.description}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
             </div>
 
             <div className="rounded-lg overflow-hidden border border-[var(--border)]">

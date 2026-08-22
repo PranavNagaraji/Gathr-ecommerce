@@ -2,7 +2,7 @@
 import { useAuth, useUser } from "@clerk/nextjs";
 import axios from "axios";
 import { useCallback, useEffect, useState, useRef } from "react";
-import { useJsApiLoader, StandaloneSearchBox } from "@react-google-maps/api";
+import { reverseGeocode, searchAddress } from "@/lib/geo";
 import 'leaflet/dist/leaflet.css';
 // Leaflet must be loaded only on the client to avoid SSR 'window is not defined'
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
@@ -77,7 +77,6 @@ const CartItemsSummary = ({ cartItems, totalPrice, inactiveCartItems = [] }) => 
 const Checkout = () => {
 
   const leafletMapRef = useRef(null);
-  const [searchBox, setSearchBox] = useState(null);
   const router = useRouter();
   const { user } = useUser();
   const { isLoaded, isSignedIn, getToken } = useAuth();
@@ -101,11 +100,11 @@ const Checkout = () => {
   const [fetchingLocation, setFetchingLocation] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("");
 
-  const Libraries = ["places"];
-  const { isLoaded: mapLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-    libraries: Libraries, // ← Important! Include "places"
-  });
+  // Address search state
+  const [addrSearchQuery, setAddrSearchQuery] = useState("");
+  const [addrSearchResults, setAddrSearchResults] = useState([]);
+  const [showAddrDropdown, setShowAddrDropdown] = useState(false);
+  const addrSearchDebounceRef = useRef(null);
 
   const applyInactiveGuard = useCallback((payload) => {
     const inactive = Array.isArray(payload?.inactiveCartItems)
@@ -226,24 +225,21 @@ const Checkout = () => {
     setSelectedAddressId(id);
   };
 
-  const updateAddressFromCoords = (lat, lng) => {
+  const updateAddressFromCoords = async (lat, lng) => {
     setAddAddress((prev) => ({
       ...prev,
       location: { latitude: lat, longitude: lng },
     }));
-
-    if (window.google && window.google.maps) {
-      const geocoder = new window.google.maps.Geocoder();
-      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-        if (status === "OK" && results[0]) {
-          setAddAddress((prev) => ({
-            ...prev,
-            address: results[0].formatted_address,
-            location: { latitude: lat, longitude: lng },
-          }));
-        }
-      });
-    }
+    try {
+      const addr = await reverseGeocode(lat, lng);
+      if (addr) {
+        setAddAddress((prev) => ({
+          ...prev,
+          address: addr,
+          location: { latitude: lat, longitude: lng },
+        }));
+      }
+    } catch {}
   };
 
   const handleFetchCurrentLocation = () => {
@@ -253,41 +249,24 @@ const Checkout = () => {
     }
     setFetchingLocation(true);
     navigator.geolocation.getCurrentPosition(
-      (position) => {
+      async (position) => {
         const lat = position.coords.latitude;
         const lng = position.coords.longitude;
-
-        if (window.google && window.google.maps) {
-          const geocoder = new window.google.maps.Geocoder();
-          geocoder.geocode({ location: { lat, lng } }, (results, status) => {
-            setFetchingLocation(false);
-            if (status === "OK" && results[0]) {
-              setAddAddress((prev) => ({
-                ...prev,
-                address: results[0].formatted_address,
-                location: { latitude: lat, longitude: lng },
-              }));
-              if (leafletMapRef.current) {
-                leafletMapRef.current.setView([lat, lng], 15);
-              }
-            } else {
-              setAddAddress((prev) => ({
-                ...prev,
-                address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
-                location: { latitude: lat, longitude: lng },
-              }));
-              if (leafletMapRef.current) {
-                leafletMapRef.current.setView([lat, lng], 15);
-              }
-            }
-          });
-        } else {
-          setFetchingLocation(false);
+        try {
+          const addr = await reverseGeocode(lat, lng);
+          setAddAddress((prev) => ({
+            ...prev,
+            address: addr || `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
+            location: { latitude: lat, longitude: lng },
+          }));
+        } catch {
           setAddAddress((prev) => ({
             ...prev,
             address: `${lat.toFixed(6)}, ${lng.toFixed(6)}`,
             location: { latitude: lat, longitude: lng },
           }));
+        } finally {
+          setFetchingLocation(false);
           if (leafletMapRef.current) {
             leafletMapRef.current.setView([lat, lng], 15);
           }
@@ -299,6 +278,43 @@ const Checkout = () => {
       },
       { timeout: 8000 }
     );
+  };
+
+  // Address search handlers
+  const handleAddrSearchChange = (e) => {
+    const q = e.target.value;
+    setAddrSearchQuery(q);
+    setAddAddress((p) => ({ ...p, address: q }));
+    clearTimeout(addrSearchDebounceRef.current);
+    if (q.trim().length < 3) {
+      setAddrSearchResults([]);
+      setShowAddrDropdown(false);
+      return;
+    }
+    addrSearchDebounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchAddress(q);
+        setAddrSearchResults(results);
+        setShowAddrDropdown(results.length > 0);
+      } catch {
+        setAddrSearchResults([]);
+        setShowAddrDropdown(false);
+      }
+    }, 400);
+  };
+
+  const handleAddrSearchSelect = (result) => {
+    setShowAddrDropdown(false);
+    setAddrSearchResults([]);
+    setAddrSearchQuery(result.description);
+    setAddAddress((prev) => ({
+      ...prev,
+      address: result.description,
+      location: { latitude: result.lat, longitude: result.lng },
+    }));
+    if (leafletMapRef.current) {
+      leafletMapRef.current.setView([result.lat, result.lng], 15);
+    }
   };
 
   const handleAddAddress = async () => {
@@ -714,8 +730,8 @@ const Checkout = () => {
 
 
 
-                      {/* Google Places Autocomplete */}
-                      <div className="flex items-center justify-between">
+                      {/* Address search — Nominatim powered */}
+                      <div className="flex items-center justify-between mb-1">
                         <label className="text-[var(--card-foreground)] font-medium">Address</label>
                         <button
                           type="button"
@@ -726,40 +742,34 @@ const Checkout = () => {
                           {fetchingLocation ? "⏳ Locating..." : "📍 Use Current Location"}
                         </button>
                       </div>
-
-                      <StandaloneSearchBox
-                        onLoad={(ref) => setSearchBox(ref)}
-                        onPlacesChanged={() => {
-                          if (!searchBox) return;
-                          const places = searchBox.getPlaces();
-                          if (!places || places.length === 0) return;
-                          const place = places[0];
-
-                          setAddAddress((prev) => ({
-                            ...prev,
-                            address: place.formatted_address,
-                            location: {
-                              latitude: place.geometry.location.lat(),
-                              longitude: place.geometry.location.lng(),
-                            },
-                          }));
-
-                          // Center map to selected place
-                          if (leafletMapRef.current) {
-                            leafletMapRef.current.setView([place.geometry.location.lat(), place.geometry.location.lng()], 15);
-                          }
-                        }}
-                      >
+                      <div className="relative">
                         <input
                           type="text"
                           placeholder="Search Address"
-                          value={addAddress.address || ""}
-                          onChange={(e) =>
-                            setAddAddress((prev) => ({ ...prev, address: e.target.value }))
-                          }
+                          value={addrSearchQuery || addAddress.address || ""}
+                          onChange={handleAddrSearchChange}
+                          onBlur={() => setTimeout(() => setShowAddrDropdown(false), 160)}
+                          onFocus={() => addrSearchResults.length > 0 && setShowAddrDropdown(true)}
+                          autoComplete="off"
                           className="border border-[var(--border)] p-2 rounded-md w-full bg-[var(--card)] text-[var(--card-foreground)]"
                         />
-                      </StandaloneSearchBox>
+                        {showAddrDropdown && addrSearchResults.length > 0 && (
+                          <div className="absolute left-0 right-0 top-full mt-1 z-[99999] bg-[var(--card)] border border-[var(--border)] rounded-xl shadow-2xl overflow-hidden">
+                            {addrSearchResults.map((r, idx) => (
+                              <button
+                                key={r.place_id}
+                                type="button"
+                                onMouseDown={() => handleAddrSearchSelect(r)}
+                                className={`w-full text-left px-3 py-2.5 text-sm hover:bg-[var(--muted)] text-[var(--foreground)] transition-colors ${
+                                  idx < addrSearchResults.length - 1 ? 'border-b border-[var(--border)]' : ''
+                                }`}
+                              >
+                                {r.description}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
 
                       {/* Map */}
                       <MiniLeafletMap

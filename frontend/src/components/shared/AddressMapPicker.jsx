@@ -1,18 +1,7 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { useJsApiLoader } from '@react-google-maps/api';
+import { reverseGeocode, searchAddress } from '@/lib/geo';
 import 'leaflet/dist/leaflet.css';
-
-// Module-level constant so useJsApiLoader sees a stable reference
-const LIBRARIES = ['places'];
-
-// Reverse-geocode a lat/lng → human-readable address
-function reverseGeocode(lat, lng, cb) {
-  if (typeof window === 'undefined' || !window.google?.maps?.Geocoder) return;
-  new window.google.maps.Geocoder().geocode({ location: { lat, lng } }, (results, status) => {
-    if (status === 'OK' && results?.[0]) cb(results[0].formatted_address);
-  });
-}
 
 /**
  * AddressMapPicker
@@ -38,7 +27,6 @@ export default function AddressMapPicker({
   const [showDropdown, setShowDropdown] = useState(false);
   const [isGeocoding, setIsGeocoding] = useState(false);
   const debounceRef = useRef(null);
-  const sessionTokenRef = useRef(null);
 
   // ── Leaflet state ─────────────────────────────────────────────────────────
   const [L, setL] = useState(null);
@@ -48,14 +36,6 @@ export default function AddressMapPicker({
   // Tracks the last lat/lng we applied to the map so we can avoid
   // redundant flyTo calls triggered by our own onChange callbacks
   const lastAppliedRef = useRef(null);
-
-  // ── Google Maps JS API ────────────────────────────────────────────────────
-  const { isLoaded: mapsLoaded } = useJsApiLoader({
-    googleMapsApiKey: process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY,
-    libraries: LIBRARIES,
-  });
-  const placesReady =
-    mapsLoaded && typeof window !== 'undefined' && !!window.google?.maps?.places;
 
   // ── Load Leaflet on client only ───────────────────────────────────────────
   useEffect(() => {
@@ -109,26 +89,30 @@ export default function AddressMapPicker({
       .openPopup();
 
     // Marker dragged → reverse geocode → call onChange
-    marker.on('dragend', (e) => {
+    marker.on('dragend', async (e) => {
       const { lat: newLat, lng: newLng } = e.target.getLatLng();
       lastAppliedRef.current = { lat: newLat, lng: newLng };
       setIsGeocoding(true);
-      reverseGeocode(newLat, newLng, (addr) => {
-        onChange({ lat: newLat, lng: newLng, address: addr });
+      try {
+        const addr = await reverseGeocode(newLat, newLng);
+        onChange({ lat: newLat, lng: newLng, address: addr || `${newLat.toFixed(5)}, ${newLng.toFixed(5)}` });
+      } finally {
         setIsGeocoding(false);
-      });
+      }
     });
 
     // Map click → move marker + reverse geocode → call onChange
-    map.on('click', (e) => {
+    map.on('click', async (e) => {
       const { lat: newLat, lng: newLng } = e.latlng;
       marker.setLatLng([newLat, newLng]);
       lastAppliedRef.current = { lat: newLat, lng: newLng };
       setIsGeocoding(true);
-      reverseGeocode(newLat, newLng, (addr) => {
-        onChange({ lat: newLat, lng: newLng, address: addr });
+      try {
+        const addr = await reverseGeocode(newLat, newLng);
+        onChange({ lat: newLat, lng: newLng, address: addr || `${newLat.toFixed(5)}, ${newLng.toFixed(5)}` });
+      } finally {
         setIsGeocoding(false);
-      });
+      }
     });
 
     mapRef.current = map;
@@ -162,81 +146,50 @@ export default function AddressMapPicker({
     const addr = e.target.value;
     onChange({ ...(value ?? {}), address: addr });
 
-    if (!placesReady || addr.trim().length < 3) {
+    if (addr.trim().length < 3) {
       setPredictions([]);
       setShowDropdown(false);
       return;
     }
 
     clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => {
-      if (!sessionTokenRef.current) {
-        sessionTokenRef.current =
-          new window.google.maps.places.AutocompleteSessionToken();
-      }
-      new window.google.maps.places.AutocompleteService().getPlacePredictions(
-        {
-          input: addr,
-          sessionToken: sessionTokenRef.current,
-          componentRestrictions: { country: 'in' },
-          types: ['geocode', 'establishment'],
-        },
-        (results, status) => {
-          if (
-            status === window.google.maps.places.PlacesServiceStatus.OK &&
-            results?.length
-          ) {
-            setPredictions(results);
-            setShowDropdown(true);
-          } else {
-            setPredictions([]);
-            setShowDropdown(false);
-          }
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const results = await searchAddress(addr);
+        if (results.length > 0) {
+          setPredictions(results);
+          setShowDropdown(true);
+        } else {
+          setPredictions([]);
+          setShowDropdown(false);
         }
-      );
-    }, 300);
+      } catch {
+        setPredictions([]);
+        setShowDropdown(false);
+      }
+    }, 400);
   };
 
-  // ── Prediction selected → getDetails → fly map ────────────────────────────
+  // ── Prediction selected → fly map to coordinates ──────────────────────────
   const pickPrediction = (prediction) => {
     setShowDropdown(false);
     setPredictions([]);
-    onChange({ ...(value ?? {}), address: prediction.description });
 
-    if (!placesReady) return;
+    const lat = prediction.lat;
+    const lng = prediction.lng;
+    lastAppliedRef.current = { lat, lng };
 
-    new window.google.maps.places.PlacesService(
-      document.createElement('div')
-    ).getDetails(
-      {
-        placeId: prediction.place_id,
-        fields: ['formatted_address', 'geometry'],
-        sessionToken: sessionTokenRef.current,
-      },
-      (place, status) => {
-        sessionTokenRef.current = null; // consume token
-        if (
-          status !== window.google.maps.places.PlacesServiceStatus.OK ||
-          !place?.geometry
-        ) return;
+    onChange({
+      lat,
+      lng,
+      address: prediction.description,
+    });
 
-        const lat = place.geometry.location.lat();
-        const lng = place.geometry.location.lng();
-        lastAppliedRef.current = { lat, lng };
-
-        onChange({
-          lat,
-          lng,
-          address: place.formatted_address || prediction.description,
-        });
-
-        // Fly map + move marker directly (don't wait for parent re-render)
-        if (mapRef.current && markerRef.current) {
-          mapRef.current.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
-          markerRef.current.setLatLng([lat, lng]);
-        }
-      }
-    );
+    // Fly map + move marker directly (don't wait for parent re-render)
+    if (mapRef.current && markerRef.current) {
+      mapRef.current.flyTo([lat, lng], 16, { animate: true, duration: 1.0 });
+      markerRef.current.setLatLng([lat, lng]);
+    }
   };
 
   // ─────────────────────────────────────────────────────────────────────────

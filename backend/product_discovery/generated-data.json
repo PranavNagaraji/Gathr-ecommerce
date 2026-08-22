@@ -1,0 +1,181 @@
+[
+  {
+    "name": "Amul Taaza Milk 1L",
+    "description": "Fresh pasteurized toned milk rich in calcium and protein.",
+    "quantity": 150,
+    "price": 58,
+    "category": [
+      "Dairy",
+      "Grocery"
+    ],
+    "shop_id": 3,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931035/seed-products/zqa0h68e68kcutc9z821.jpg",
+        "public_id": "seed-products/zqa0h68e68kcutc9z821"
+      }
+    ]
+  },
+  {
+    "name": "Aashirvaad Atta 5kg",
+    "description": "Premium whole wheat flour suitable for chapatis and rotis.",
+    "quantity": 80,
+    "price": 299,
+    "category": [
+      "Grocery",
+      "Staples"
+    ],
+    "shop_id": 3,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931037/seed-products/k0ypbnfuazxxillwdljt.jpg",
+        "public_id": "seed-products/k0ypbnfuazxxillwdljt"
+      }
+    ]
+  },
+  {
+    "name": "Tata Salt 1kg",
+    "description": "Iodized vacuum evaporated salt.",
+    "quantity": 200,
+    "price": 28,
+    "category": [
+      "Grocery",
+      "Cooking Essentials"
+    ],
+    "shop_id": 3,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931038/seed-products/ewsiumo9zn89kcj2ut1b.jpg",
+        "public_id": "seed-products/ewsiumo9zn89kcj2ut1b"
+      }
+    ]
+  },
+  {
+    "name": "Nutella 350g",
+    "description": "Hazelnut cocoa spread.",
+    "quantity": 60,
+    "price": 249,
+    "category": [
+      "Snacks",
+      "Spread"
+    ],
+    "shop_id": 3,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931040/seed-products/w8ea38yw80nwzkfvsfh8.jpg",
+        "public_id": "seed-products/w8ea38yw80nwzkfvsfh8"
+      }
+    ]
+  },
+  {
+    "name": "Pepsi 500ml",
+    "description": "Refreshing carbonated soft drink.",
+    "quantity": 120,
+    "price": 40,
+    "category": [
+      "Beverages"
+    ],
+    "shop_id": 3,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931041/seed-products/xtk5y2s4f4kleby5dggc.jpg",
+        "public_id": "seed-products/xtk5y2s4f4kleby5dggc"
+      }
+    ]
+  },
+  {
+    "name": "Sony DualSense Wireless Controller",
+    "description": "Official PS5 wireless controller.",
+    "quantity": 35,
+    "price": 5990,
+    "category": [
+      "Gaming Accessories",
+      "Controllers"
+    ],
+    "shop_id": 4,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931042/seed-products/krj04uaiumxpsbvbpdis.jpg",
+        "public_id": "seed-products/krj04uaiumxpsbvbpdis"
+      }
+    ]
+  },
+  {
+    "name": "Xbox Wireless Controller",
+    "description": "Official Xbox wireless controller.",
+    "quantity": 30,
+    "price": 5490,
+    "category": [
+      "Gaming Accessories",
+      "Controllers"
+    ],
+    "shop_id": 4,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931044/seed-products/uno6o6lkdcndn79sxwsx.jpg",
+        "public_id": "seed-products/uno6o6lkdcndn79sxwsx"
+      }
+    ]
+  },
+  {
+    "name": "Razer DeathAdder Essential",
+    "description": "Ergonomic gaming mouse.",
+    "quantity": 50,
+    "price": 1999,
+    "category": [
+      "Gaming Accessories",
+      "Mouse"
+    ],
+    "shop_id": 4,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931045/seed-products/b8jn3qalxg94borsiylb.jpg",
+        "public_id": "seed-products/b8jn3qalxg94borsiylb"
+      }
+    ]
+  },
+  {
+    "name": "HyperX Cloud Stinger",
+    "description": "Gaming headset with immersive audio.",
+    "quantity": 40,
+    "price": 4299,
+    "category": [
+      "Gaming Accessories",
+      "Audio"
+    ],
+    "shop_id": 4,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931047/seed-products/msqo337to1tjbtlfn9it.jpg",
+        "public_id": "seed-products/msqo337to1tjbtlfn9it"
+      }
+    ]
+  },
+  {
+    "name": "Nintendo Switch OLED",
+    "description": "Portable gaming console with OLED display.",
+    "quantity": 15,
+    "price": 32990,
+    "category": [
+      "Gaming Accessories",
+      "Console"
+    ],
+    "shop_id": 4,
+    "sold_qt": 0,
+    "images": [
+      {
+        "url": "https://res.cloudinary.com/dryeabikl/image/upload/v1780931048/seed-products/cp8b5qpoub5oagfgnq8r.jpg",
+        "public_id": "seed-products/cp8b5qpoub5oagfgnq8r"
+      }
+    ]
+  }
+]
