@@ -300,8 +300,17 @@ NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/auth-callback
 # Google Maps JavaScript API key (enable: Maps JS API, Places API, Geocoding API)
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
 
-# Google Gemini API key (used by Next.js API routes / AI shop assistant)
+# Google Gemini API key (used by Next.js API routes / Shop Assistant)
 GOOGLE_API_KEY=YOUR_GOOGLE_GEMINI_API_KEY
+
+# Firebase — web SDK configuration (phone auth & auxiliary services)
+NEXT_PUBLIC_FIREBASE_API_KEY=YOUR_FIREBASE_API_KEY
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=YOUR_FIREBASE_AUTH_DOMAIN
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=YOUR_FIREBASE_PROJECT_ID
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=YOUR_FIREBASE_STORAGE_BUCKET
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_MESSAGING_SENDER_ID
+NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
+NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=YOUR_FIREBASE_MEASUREMENT_ID
 ```
 
 #### Backend — `backend/.env`
@@ -498,6 +507,7 @@ This project is developed as part of a software engineering capstone and is inte
 
 ---
 
-**Last Updated**: June 2026  
+**Last Updated**: August 2026  
 **Version**: 1.0.0  
 **Maintainer(s)**: pranavnagaraji22@gmail.com
+
