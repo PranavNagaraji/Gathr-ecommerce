@@ -3,13 +3,13 @@ import { initializeApp } from "firebase/app";
 import { getAuth, RecaptchaVerifier, signInWithPhoneNumber } from "firebase/auth";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyDDrywOH0Bvc4gKN8rPIcx4JpYq8A8abDA",
-  authDomain: "gathr-1f6e4.firebaseapp.com",
-  projectId: "gathr-1f6e4",
-  storageBucket: "gathr-1f6e4.firebasestorage.app",
-  messagingSenderId: "163852092979",
-  appId: "1:163852092979:web:867f5b00b3fba30bd8c546",
-  measurementId: "G-KLCJ69PGTF"
+  apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+  authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 };
 
 const app = initializeApp(firebaseConfig);
