@@ -1,22 +1,28 @@
-# Gathr 🛍️
+# Gathr
 
 > **A hyper-local marketplace platform** connecting customers with merchants and shopkeepers in their immediate vicinity.
 
-[![Next.js](https://img.shields.io/badge/Next.js-15.4-black?logo=next.js)](https://nextjs.org)
-[![Express](https://img.shields.io/badge/Express.js-5.1-lightgrey?logo=express)](https://expressjs.com)
-[![Supabase](https://img.shields.io/badge/Supabase-PostgreSQL-green?logo=supabase)](https://supabase.com)
-[![Clerk](https://img.shields.io/badge/Auth-Clerk-purple?logo=clerk)](https://clerk.com)
-[![Redis](https://img.shields.io/badge/Redis-Cache%20%26%20PubSub-red?logo=redis)](https://redis.io)
+[![Next.js](https://img.shields.io/badge/Next.js-15.4-black?style=flat-square&logo=next.js)](https://nextjs.org)
+[![React](https://img.shields.io/badge/React-19.2-61DAFB?style=flat-square&logo=react&logoColor=black)](https://react.dev)
+[![Express](https://img.shields.io/badge/Express.js-5.1-000000?style=flat-square&logo=express)](https://expressjs.com)
+[![Node.js](https://img.shields.io/badge/Node.js-18+-339933?style=flat-square&logo=node.js)](https://nodejs.org)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Supabase-3ECF8E?style=flat-square&logo=supabase)](https://supabase.com)
+[![Redis](https://img.shields.io/badge/Redis-JSON%20%26%20Search-FF4438?style=flat-square&logo=redis)](https://redis.io)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-v4-38B2AC?style=flat-square&logo=tailwind-css)](https://tailwindcss.com)
+[![Clerk](https://img.shields.io/badge/Auth-Clerk-6C47FF?style=flat-square&logo=clerk)](https://clerk.com)
+[![OpenStreetMap](https://img.shields.io/badge/Maps-Leaflet%20%26%20OSM-7EBC6F?style=flat-square&logo=openstreetmap)](https://openstreetmap.org)
+[![Socket.io](https://img.shields.io/badge/Real--Time-Socket.io-010101?style=flat-square&logo=socket.io)](https://socket.io)
+[![Google Gemini](https://img.shields.io/badge/AI-Google_Gemini-8E75B2?style=flat-square&logo=google)](https://aistudio.google.com)
 
 ---
 
-## 🚀 Project Overview
+## Project Overview
 
 Gathr is a full-stack, production-grade web application that enables local businesses to showcase their products and services to nearby customers. It features real-time order tracking, AI-powered product listing tools, geolocation-based discovery, role-based multi-actor authentication, high-performance product caching/searching and in-order chat persistence powered by **Redis**, and an end-to-end payment pipeline using Razorpay.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### Frontend — Next.js 15 (App Router)
 
@@ -52,7 +58,7 @@ Gathr is a full-stack, production-grade web application that enables local busin
 
 ---
 
-## 📁 Project Structure
+## Project Structure
 
 ```
 Gathr/
@@ -139,15 +145,15 @@ Gathr/
 
 ---
 
-## 🎯 Feature Set
+## Feature Set
 
-### 🔐 Authentication & Authorization
+### Authentication & Authorization
 - **Multi-role Clerk authentication**: Customer, Merchant, Carrier, Admin
 - **JWT-protected API routes** with `requireAuth` middleware
 - **Role-based route protection** via Next.js middleware
 - **Admin login** via separate PIN-gated flow (localStorage-persisted session)
 
-### 🛒 Customer Experience
+### Customer Experience
 - **Geolocation-based shop discovery**: finds shops within configurable radius
 - **Fuzzy full-text item search** and category browsing powered by **RediSearch** and sorted by popularity/sales
 - **Shopping Cart**: optimistic UI, auto-save on `+`/`−`, animated item removal, instant navbar badge via `cart:changed` event
@@ -158,7 +164,7 @@ Gathr/
 - **AI product descriptions**: Gemini-powered "describe this item" feature
 - **Personalised recommendations** based on purchase history
 
-### 🏪 Merchant Dashboard
+### Merchant Dashboard
 - **Shop creation and management** with Cloudinary image uploads
 - **Inventory management**: add, edit, delete products (automatically synced to RedisJSON cache)
 - **AI-assisted product listing** (see Innovations section below)
@@ -166,25 +172,25 @@ Gathr/
 - **Order management**: accept/reject/update order status
 - **Pending orders badge** in navbar, auto-refreshed on navigation
 
-### 🚚 Carrier (Delivery Agent) Portal
+### Carrier (Delivery Agent) Portal
 - **Assigned delivery queue** with order details
 - **Live GPS location streaming** via Socket.IO to all parties
 - **Delivery history** with earnings summary
 - **Profile management**
 
-### 🛠️ Admin Panel
+### Admin Panel
 - **User ban/unban management**
 - **Complaint resolution queue**
 - **Transactional email dispatch** via SMTP/Mailjet
 
-### 💬 Real-time Features (Socket.IO & Redis)
+### Real-Time Services (Socket.IO & Redis)
 - Carrier GPS location broadcast to order-specific rooms
 - **In-order live chat persistence**: Chat history is persisted in **Redis Lists** (`chat:{orderId}`), maintaining the last 200 messages with a 7-day expiration (TTL).
 - Cart badge and wishlist badge instant updates via custom browser events
 
 ---
 
-## 💡 Innovations
+## System Innovations
 
 ### 1. AI-Powered Product Listing (Gemini Vision)
 
@@ -265,12 +271,12 @@ Gathr supports four languages out of the box: **English**, **Telugu (తెల�
 
 ---
 
-## 🛠️ Setup Instructions
+## Setup Instructions
 
 ### Prerequisites
 - Node.js v18 or higher
 - npm (v9+) or yarn
-- Accounts/Instances with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google Cloud / Google AI Studio](https://aistudio.google.com) (for Gemini API; Google Maps API key is optional if needed)
+- Accounts/Instances with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google AI Studio](https://aistudio.google.com) (for Gemini API; Google Maps API key is optional if needed)
 - A running **Redis** instance (e.g., Redis Cloud or local Redis Stack)
 - A Gmail account (or any SMTP provider) for transactional email. Optionally, a [Mailjet](https://mailjet.com) account as a fallback.
 
@@ -318,6 +324,12 @@ NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_MESSAGING_SENDER_ID
 NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
 NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=YOUR_FIREBASE_MEASUREMENT_ID
 ```
+
+> [!IMPORTANT]
+> **Maps & Geolocation Configuration**
+> - **Default (Zero-Key)**: Open-source Leaflet with OpenStreetMap (Nominatim search & OSRM driving routes) is fully enabled out of the box with zero API keys required.
+> - **Google Maps (Optional)**: If you need to integrate Google Maps Platform services in the frontend environment, strictly configure `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (instead of LocationIQ).
+> - **LocationIQ (Optional Fallback)**: If higher Nominatim geocoding rate limits are needed without Google Maps, populate `NEXT_PUBLIC_LOCATIONIQ_API_KEY`.
 
 #### Backend — `backend/.env`
 
@@ -371,12 +383,14 @@ DELIVERY_BASE_FEE=30
 DELIVERY_PER_KM_FEE=10
 ```
 
-> **Email Priority & Cloud Hosting (Render) Optimization**:
+> [!NOTE]
+> **Email Priority & Cloud Hosting (Render) Optimization**
 > - **Localhost**: The backend attempts to send via SMTP first. If SMTP fails (configured with a 5-second timeout safeguard) or is not configured, it falls back to Mailjet.
 > - **Render / Deployed Environment**: Since cloud platforms like Render block outbound SMTP ports (`25`, `465`, `587`) on free tiers, the backend automatically detects the Render environment (`RENDER=true`) and **skips SMTP entirely**, executing the Mailjet fallback instantly if `MJ_APIKEY_PUBLIC`, `MJ_APIKEY_PRIVATE`, and `MJ_SENDER_EMAIL` are configured. This prevents 60-second connection timeout delays.
 > - **Dark Mode Safety**: Transactional email templates are explicitly styled with dark text colors (`#111111`) to prevent OTP visibility issues in dark-mode email clients.
 
-> **Security Note**: Never commit your `.env` files to version control. Both `frontend/.env` and `backend/.env` are listed in `.gitignore`.
+> [!WARNING]
+> **Security Requirement**: Never commit your `.env` files to version control. Both `frontend/.env` and `backend/.env` are listed in `.gitignore`.
 
 ---
 
@@ -406,7 +420,7 @@ npm run dev
 
 ---
 
-## 🔗 API Reference
+## API Reference
 
 ### Public / Auth
 | Method | Endpoint | Description |
@@ -467,7 +481,7 @@ npm run dev
 
 ---
 
-## 🎨 Design System
+## Design System
 
 - **Color scheme**: Fully CSS-variable-driven dark/light theming (`oklch` color space), toggleable at runtime without page reload
 - **Typography**: Inter, Outfit, Quicksand (Google Fonts)
@@ -476,7 +490,7 @@ npm run dev
 
 ---
 
-## ✅ Completed Features
+## Feature Roadmap & Status
 
 - [x] Multi-role authentication (Clerk)
 - [x] Geolocation-based shop and product discovery (Leaflet + OpenStreetMap + OSRM)
@@ -498,7 +512,7 @@ npm run dev
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
@@ -507,7 +521,7 @@ npm run dev
 
 ---
 
-## 📄 License
+## License
 
 This project is developed as part of a software engineering capstone and is intended for educational and demonstration purposes.
 
@@ -516,4 +530,3 @@ This project is developed as part of a software engineering capstone and is inte
 **Last Updated**: August 2026  
 **Version**: 1.0.0  
 **Maintainer(s)**: pranavnagaraji22@gmail.com
-
