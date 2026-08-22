@@ -29,7 +29,7 @@ Gathr is a full-stack, production-grade web application that enables local busin
 | Animations | Framer Motion v12, GSAP v3, Three.js v0.179, OGL |
 | HTTP Client | Axios v1 |
 | Real-time | Socket.IO client (order tracking, live delivery, in-order chat) |
-| Maps | Google Maps JavaScript API (`@react-google-maps/api`), Leaflet |
+| Maps | Leaflet.js, OpenStreetMap (Nominatim search/reverse geocoding & OSRM routing) |
 | i18n | react-i18next (English, Telugu, Tamil, Hindi) |
 | Notifications | react-hot-toast |
 | Carousel | react-slick + slick-carousel |
@@ -92,6 +92,8 @@ Gathr/
 │       │   ├── Notification.jsx    # Shared toast notification component
 │       │   └── RouteTransition.jsx # Page transition overlay
 │       ├── lib/
+│       │   ├── firebase.js         # Firebase client config (loaded via process.env)
+│       │   ├── geo.js              # Free open-source geolocation, search & routing (Nominatim/OSRM)
 │       │   └── i18n.js             # Internationalization config
 │       └── middleware.js           # Clerk route-protection middleware
 │
@@ -240,7 +242,7 @@ Merchants can also **type a barcode number manually** and trigger the lookup wit
 
 Customers see only shops and products within their proximity. Location is resolved from:
 1. Browser Geolocation API (GPS-precise)
-2. Google Maps Places Autocomplete (address-based)
+2. OpenStreetMap / Nominatim Address Search & Autocomplete (with interactive Leaflet map pin-drop)
 3. Pre-selected Indian city presets (Mumbai, Delhi, Bengaluru, Hyderabad, Chennai, Kolkata, Pune, Ahmedabad) — shown in a modal if no location is set
 
 The backend filters shops using Haversine distance formula, and all product category sections on the home dashboard are populated exclusively from nearby shop inventories — no fake or out-of-range products are shown.
@@ -268,7 +270,7 @@ Gathr supports four languages out of the box: **English**, **Telugu (తెల�
 ### Prerequisites
 - Node.js v18 or higher
 - npm (v9+) or yarn
-- Accounts/Instances with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google Cloud](https://cloud.google.com) (Maps + Gemini APIs)
+- Accounts/Instances with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google Cloud / Google AI Studio](https://aistudio.google.com) (for Gemini API; Google Maps API key is optional if needed)
 - A running **Redis** instance (e.g., Redis Cloud or local Redis Stack)
 - A Gmail account (or any SMTP provider) for transactional email. Optionally, a [Mailjet](https://mailjet.com) account as a fallback.
 
@@ -297,8 +299,12 @@ NEXT_PUBLIC_CLERK_SIGN_UP_URL=/sign-up
 NEXT_PUBLIC_CLERK_AFTER_SIGN_IN_URL=/
 NEXT_PUBLIC_CLERK_AFTER_SIGN_UP_URL=/auth-callback
 
-# Google Maps JavaScript API key (enable: Maps JS API, Places API, Geocoding API)
+# Maps & Geolocation (Default: OpenStreetMap + Leaflet — 100% Free, No Key Required)
+# NOTE: If you need to use Google Maps Platform services in the frontend environment, strictly use NEXT_PUBLIC_GOOGLE_MAPS_API_KEY (instead of LocationIQ):
 NEXT_PUBLIC_GOOGLE_MAPS_API_KEY=YOUR_GOOGLE_MAPS_API_KEY
+
+# (Optional fallback) LocationIQ API Key for higher Nominatim rate limits (leave blank to use default OpenStreetMap Nominatim for free):
+NEXT_PUBLIC_LOCATIONIQ_API_KEY=
 
 # Google Gemini API key (used by Next.js API routes / Shop Assistant)
 GOOGLE_API_KEY=YOUR_GOOGLE_GEMINI_API_KEY
@@ -473,7 +479,7 @@ npm run dev
 ## ✅ Completed Features
 
 - [x] Multi-role authentication (Clerk)
-- [x] Geolocation-based shop and product discovery
+- [x] Geolocation-based shop and product discovery (Leaflet + OpenStreetMap + OSRM)
 - [x] Full shopping cart with optimistic auto-save UX
 - [x] Wishlist with real-time badge
 - [x] Razorpay checkout integration
