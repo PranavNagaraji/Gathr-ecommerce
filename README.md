@@ -1,4 +1,4 @@
-# <img src="https://simpleicons.org/v14/nextdotjs/white" width="28" height="28" valign="middle" /> Gathr E-Commerce Platform
+# <img src="https://raw.githubusercontent.com/lucide-icons/lucide/main/icons/shopping-cart.svg" width="32" height="32" valign="middle" /> Gathr E-Commerce Platform
 
 > **A hyper-local marketplace platform** connecting customers with merchants and shopkeepers in their immediate vicinity.
 
