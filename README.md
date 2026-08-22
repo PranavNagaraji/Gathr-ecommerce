@@ -1,4 +1,4 @@
-# Gathr
+# <img src="https://simpleicons.org/v14/nextdotjs/white" width="28" height="28" valign="middle" /> Gathr E-Commerce Platform
 
 > **A hyper-local marketplace platform** connecting customers with merchants and shopkeepers in their immediate vicinity.
 
@@ -16,15 +16,15 @@
 
 ---
 
-## Project Overview
+## <img src="https://img.shields.io/badge/-Overview-000000?style=flat-square&logo=readme&logoColor=white" /> Project Overview
 
 Gathr is a full-stack, production-grade web application that enables local businesses to showcase their products and services to nearby customers. It features real-time order tracking, AI-powered product listing tools, geolocation-based discovery, role-based multi-actor authentication, high-performance product caching/searching and in-order chat persistence powered by **Redis**, and an end-to-end payment pipeline using Razorpay.
 
 ---
 
-## Architecture
+## <img src="https://img.shields.io/badge/-Architecture-000000?style=flat-square&logo=diagramsdotnet&logoColor=white" /> System Architecture
 
-### Frontend — Next.js 15 (App Router)
+### <img src="https://img.shields.io/badge/-Frontend-000000?style=flat-square&logo=nextdotjs&logoColor=white" /> Frontend — Next.js 15 (App Router)
 
 | Concern | Technology |
 |---|---|
@@ -41,7 +41,7 @@ Gathr is a full-stack, production-grade web application that enables local busin
 | Carousel | react-slick + slick-carousel |
 | Firebase | Firebase v12 (auxiliary services) |
 
-### Backend — Express.js 5
+### <img src="https://img.shields.io/badge/-Backend-000000?style=flat-square&logo=express&logoColor=white" /> Backend — Express.js 5
 
 | Concern | Technology |
 |---|---|
@@ -58,7 +58,7 @@ Gathr is a full-stack, production-grade web application that enables local busin
 
 ---
 
-## Project Structure
+## <img src="https://img.shields.io/badge/-Structure-000000?style=flat-square&logo=gnubash&logoColor=white" /> Project Structure
 
 ```
 Gathr/
@@ -145,15 +145,15 @@ Gathr/
 
 ---
 
-## Feature Set
+## <img src="https://img.shields.io/badge/-Features-000000?style=flat-square&logo=github&logoColor=white" /> Core Feature Set
 
-### Authentication & Authorization
+### <img src="https://img.shields.io/badge/-Auth-000000?style=flat-square&logo=clerk&logoColor=white" /> Authentication & Authorization
 - **Multi-role Clerk authentication**: Customer, Merchant, Carrier, Admin
 - **JWT-protected API routes** with `requireAuth` middleware
 - **Role-based route protection** via Next.js middleware
 - **Admin login** via separate PIN-gated flow (localStorage-persisted session)
 
-### Customer Experience
+### <img src="https://img.shields.io/badge/-Customer-000000?style=flat-square&logo=target&logoColor=white" /> Customer Experience
 - **Geolocation-based shop discovery**: finds shops within configurable radius
 - **Fuzzy full-text item search** and category browsing powered by **RediSearch** and sorted by popularity/sales
 - **Shopping Cart**: optimistic UI, auto-save on `+`/`−`, animated item removal, instant navbar badge via `cart:changed` event
@@ -164,7 +164,7 @@ Gathr/
 - **AI product descriptions**: Gemini-powered "describe this item" feature
 - **Personalised recommendations** based on purchase history
 
-### Merchant Dashboard
+### <img src="https://img.shields.io/badge/-Merchant-000000?style=flat-square&logo=shopware&logoColor=white" /> Merchant Dashboard
 - **Shop creation and management** with Cloudinary image uploads
 - **Inventory management**: add, edit, delete products (automatically synced to RedisJSON cache)
 - **AI-assisted product listing** (see Innovations section below)
@@ -172,27 +172,27 @@ Gathr/
 - **Order management**: accept/reject/update order status
 - **Pending orders badge** in navbar, auto-refreshed on navigation
 
-### Carrier (Delivery Agent) Portal
+### <img src="https://img.shields.io/badge/-Carrier-000000?style=flat-square&logo=openstreetmap&logoColor=white" /> Carrier (Delivery Agent) Portal
 - **Assigned delivery queue** with order details
 - **Live GPS location streaming** via Socket.IO to all parties
 - **Delivery history** with earnings summary
 - **Profile management**
 
-### Admin Panel
+### <img src="https://img.shields.io/badge/-Admin-000000?style=flat-square&logo=superuser&logoColor=white" /> Admin Panel
 - **User ban/unban management**
 - **Complaint resolution queue**
 - **Transactional email dispatch** via SMTP/Mailjet
 
-### Real-Time Services (Socket.IO & Redis)
+### <img src="https://img.shields.io/badge/-Real--Time-000000?style=flat-square&logo=socketdotio&logoColor=white" /> Real-Time Services (Socket.IO & Redis)
 - Carrier GPS location broadcast to order-specific rooms
 - **In-order live chat persistence**: Chat history is persisted in **Redis Lists** (`chat:{orderId}`), maintaining the last 200 messages with a 7-day expiration (TTL).
 - Cart badge and wishlist badge instant updates via custom browser events
 
 ---
 
-## System Innovations
+## <img src="https://img.shields.io/badge/-Innovations-000000?style=flat-square&logo=googlegemini&logoColor=white" /> System Innovations
 
-### 1. AI-Powered Product Listing (Gemini Vision)
+### <img src="https://img.shields.io/badge/-AI%20Listing-000000?style=flat-square&logo=googlegemini&logoColor=white" /> 1. AI-Powered Product Listing (Gemini Vision)
 
 **Problem**: Merchants, especially small shopkeepers, struggle to write accurate product names, descriptions, and prices — particularly for items they just unpacked.
 
@@ -208,7 +208,7 @@ Gathr/
 
 ---
 
-### 2. Barcode / UPC Scan-to-List Product Pipeline
+### <img src="https://img.shields.io/badge/-Barcode%20Scan-000000?style=flat-square&logo=barcode&logoColor=white" /> 2. Barcode / UPC Scan-to-List Product Pipeline
 
 **Problem**: Merchants who stock branded/packaged goods (FMCG, electronics accessories, etc.) must manually look up product details that are already publicly available via global product databases.
 
@@ -244,7 +244,7 @@ Merchants can also **type a barcode number manually** and trigger the lookup wit
 
 ---
 
-### 3. Geolocation-Based Shop & Product Discovery
+### <img src="https://img.shields.io/badge/-Location%20Services-000000?style=flat-square&logo=openstreetmap&logoColor=white" /> 3. Geolocation-Based Shop & Product Discovery
 
 Customers see only shops and products within their proximity. Location is resolved from:
 1. Browser Geolocation API (GPS-precise)
@@ -255,7 +255,7 @@ The backend filters shops using Haversine distance formula, and all product cate
 
 ---
 
-### 4. Real-Time Order Lifecycle with Live GPS Tracking
+### <img src="https://img.shields.io/badge/-Live%20Tracking-000000?style=flat-square&logo=socketdotio&logoColor=white" /> 4. Real-Time Order Lifecycle with Live GPS Tracking
 
 Entire order flow is real-time via Socket.IO:
 - Customer, merchant, and carrier join a shared `order:{id}` room on Socket.IO
@@ -265,15 +265,15 @@ Entire order flow is real-time via Socket.IO:
 
 ---
 
-### 5. Multi-language Support (i18n)
+### <img src="https://img.shields.io/badge/-i18n-000000?style=flat-square&logo=translate&logoColor=white" /> 5. Multi-language Support (i18n)
 
 Gathr supports four languages out of the box: **English**, **Telugu (తెలుగు)**, **Tamil (தமிழ்)**, and **Hindi (हिन्दी)**. Language preference is persisted in `localStorage` and survives page reloads.
 
 ---
 
-## Setup Instructions
+## <img src="https://img.shields.io/badge/-Getting%20Started-000000?style=flat-square&logo=rocket&logoColor=white" /> Quick Start & Installation
 
-### Prerequisites
+### <img src="https://img.shields.io/badge/-Prerequisites-000000?style=flat-square&logo=node.js&logoColor=white" /> Prerequisites
 - Node.js v18 or higher
 - npm (v9+) or yarn
 - Accounts/Instances with: [Clerk](https://clerk.com), [Supabase](https://supabase.com), [Cloudinary](https://cloudinary.com), [Razorpay](https://razorpay.com), [Google AI Studio](https://aistudio.google.com) (for Gemini API; Google Maps API key is optional if needed)
@@ -282,9 +282,9 @@ Gathr supports four languages out of the box: **English**, **Telugu (తెల�
 
 ---
 
-### Environment Variables
+### <img src="https://img.shields.io/badge/-Environment%20Variables-000000?style=flat-square&logo=dotenv&logoColor=white" /> Environment Variables
 
-#### Frontend — `frontend/.env`
+#### <img src="https://img.shields.io/badge/-Frontend%20Env-000000?style=flat-square&logo=nextdotjs&logoColor=white" /> Frontend — `frontend/.env`
 
 ```env
 # Backend server base URL
@@ -331,7 +331,7 @@ NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=YOUR_FIREBASE_MEASUREMENT_ID
 > - **Google Maps (Optional)**: If you need to integrate Google Maps Platform services in the frontend environment, strictly configure `NEXT_PUBLIC_GOOGLE_MAPS_API_KEY` (instead of LocationIQ).
 > - **LocationIQ (Optional Fallback)**: If higher Nominatim geocoding rate limits are needed without Google Maps, populate `NEXT_PUBLIC_LOCATIONIQ_API_KEY`.
 
-#### Backend — `backend/.env`
+#### <img src="https://img.shields.io/badge/-Backend%20Env-000000?style=flat-square&logo=express&logoColor=white" /> Backend — `backend/.env`
 
 ```env
 # CORS: allowed frontend origin
@@ -394,7 +394,7 @@ DELIVERY_PER_KM_FEE=10
 
 ---
 
-### Installation & Running
+### <img src="https://img.shields.io/badge/-Execution-000000?style=flat-square&logo=gnubash&logoColor=white" /> Installation & Execution
 
 ```bash
 # 1. Clone the repository
@@ -420,7 +420,7 @@ npm run dev
 
 ---
 
-## API Reference
+## <img src="https://img.shields.io/badge/-API%20Routes-000000?style=flat-square&logo=express&logoColor=white" /> API Reference
 
 ### Public / Auth
 | Method | Endpoint | Description |
@@ -481,7 +481,7 @@ npm run dev
 
 ---
 
-## Design System
+## <img src="https://img.shields.io/badge/-Design%20System-000000?style=flat-square&logo=tailwindcss&logoColor=white" /> Design System
 
 - **Color scheme**: Fully CSS-variable-driven dark/light theming (`oklch` color space), toggleable at runtime without page reload
 - **Typography**: Inter, Outfit, Quicksand (Google Fonts)
@@ -490,7 +490,7 @@ npm run dev
 
 ---
 
-## Feature Roadmap & Status
+## <img src="https://img.shields.io/badge/-Status-000000?style=flat-square&logo=githubactions&logoColor=white" /> Feature Roadmap & Status
 
 - [x] Multi-role authentication (Clerk)
 - [x] Geolocation-based shop and product discovery (Leaflet + OpenStreetMap + OSRM)
@@ -512,7 +512,7 @@ npm run dev
 
 ---
 
-## Contributing
+## <img src="https://img.shields.io/badge/-Contributing-000000?style=flat-square&logo=git&logoColor=white" /> Contributing
 
 1. Fork the repository
 2. Create a feature branch: `git checkout -b feature/my-feature`
@@ -521,7 +521,7 @@ npm run dev
 
 ---
 
-## License
+## <img src="https://img.shields.io/badge/-License-000000?style=flat-square&logo=opensourceinitiative&logoColor=white" /> License
 
 This project is developed as part of a software engineering capstone and is intended for educational and demonstration purposes.
 
